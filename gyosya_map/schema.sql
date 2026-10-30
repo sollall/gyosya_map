@@ -125,3 +125,13 @@ CREATE TABLE IF NOT EXISTS refetch_queue (
     queued_at  TEXT NOT NULL,
     done_at    TEXT
 );
+
+-- 町丁目の代表点（Geolonia 住所データ, CC BY 4.0）。geo-update で取り込む。地図の表示に使う。
+CREATE TABLE IF NOT EXISTS town (
+    code     TEXT NOT NULL,                 -- 市区町村コード6桁
+    name     TEXT NOT NULL,                 -- 大字町丁目名（原文）
+    name_key TEXT NOT NULL,                 -- 正規化した名前（「三丁目」→「3丁目」）
+    lat      REAL NOT NULL,
+    lng      REAL NOT NULL,
+    PRIMARY KEY (code, name)
+);

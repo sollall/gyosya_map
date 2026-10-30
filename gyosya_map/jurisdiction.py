@@ -40,6 +40,7 @@ class Location:
     pref_code: str = ""
     city_code: str | None = None    # 行政区の場合の市のコード
     kind: str = ""
+    rest: str = ""                  # 市区町村名より後ろ（正規化済み。例: 小杉町3丁目1-2）
 
 
 @dataclass
@@ -118,7 +119,7 @@ def resolve_location(conn: sqlite3.Connection, address: str) -> Location:
     town = re.match(r"[^0-9\-]*?[0-9]+丁目|[^0-9\-]*", s[len(matched):]).group(0)
     return Location(code=r["code"], municipality=r["name"], town=town, public_sewer=bool(r["public_sewer"]),
                     health_center_city=bool(r["health_center_city"]), pref_code=r["pref_code"],
-                    city_code=r["city_code"], kind=r["kind"])
+                    city_code=r["city_code"], kind=r["kind"], rest=s[len(matched):])
 
 
 # ---- 市区町村 → 担当機関 ---------------------------------------------------

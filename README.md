@@ -88,6 +88,25 @@ uv run gyosya-map schemes   # 制度の一覧と名簿の取得日
 `demolition` 解体 / `reform` 大きなリフォーム。制度なし業種: `locksmith` `small_reform` `pest` `aircon_cleaning`。
 日本語の業種名（「解体」など）でも指定できる。
 
+## 地図
+
+名簿の業者を所在地にプロットしたHTMLを書き出す（ブラウザで開く。地図は国土地理院の淡色地図）。
+
+```bash
+# 初回だけ: 町丁目の座標（Geolonia 住所データ, 約50MB）をダウンロードして取り込む
+uv run gyosya-map geo-update
+
+# 地図を書き出す
+uv run gyosya-map map --out data/map.html
+uv run gyosya-map map --trade demolition --status active --out data/kaitai.html
+```
+
+- 色は状態（有効・期限切れ・取消／廃止・名簿から消えた）。制度ごとに表示を切り替えられ、近い点はまとめて表示する。
+- ピンを押すと、業者名・番号・有効期限・所在地・出典の名簿と取得日が出る。代表者名は出さない。
+- 位置は町丁目の代表点で、番地までは合わせていない。丁目が分からない住所は町名の中心、
+  町名も分からない住所は市区町村の中心に置き、ポップアップにその旨を出す。
+- 市区町村が分からない住所は表示せず、件数を出す。
+
 ## 判定
 
 | 判定 | 条件 |
@@ -163,6 +182,7 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 | `gyosya_map/ingest/` | 公開形式ごとのパーサー（Excel .xlsx/.xls・PDF・告示PDF・CSV）と制度ごとの読み込み設定、名簿のダウンロード、原本保存、ページ監視 |
 | `gyosya_map/matcher.py` | 照合ロジックと判定 |
 | `gyosya_map/freshness.py` | 期限の自動処理、90日警告 |
+| `gyosya_map/geo.py`, `mapview.py` | 住所 → 町丁目の代表点、地図のHTML |
 
 検索システム型の制度（国交省 建設業者検索）は、照会時に問い合わせる `SearchSystemClient` を `check()` に渡す。
 渡さない場合は「検索システムでの確認が必要」として判定不能を返す。

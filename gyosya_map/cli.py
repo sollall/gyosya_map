@@ -6,6 +6,8 @@
   uv run gyosya-map preview --scheme ID --file 名簿.xlsx   # 取り込まずに読み取り結果を確認
   uv run gyosya-map fetch   --scheme ID --import             # 掲載ページから名簿をダウンロードして取り込む
   uv run gyosya-map check   --address 住所 --trade water --license 123
+  uv run gyosya-map geo-update                               # 地図用の町丁目の座標を取り込む（初回のみ）
+  uv run gyosya-map map --out data/map.html                  # 名簿の業者を地図にプロット
   uv run gyosya-map expire | monitor | schemes
 """
 
@@ -92,6 +94,16 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--import", dest="do_import", action="store_true", help="ダウンロード後に取り込む（全件名簿のみ）")
     sp.add_argument("--dest", default="data/downloads", help="保存先")
 
+    sp = sub.add_parser("geo-update", help="地図用に町丁目の座標（Geolonia 住所データ）を取り込む")
+    sp.add_argument("--file", help="ダウンロード済みの latest.csv（省略時はダウンロードする。約50MB）")
+
+    sp = sub.add_parser("map", help="名簿の業者を地図にプロットしたHTMLを書き出す")
+    sp.add_argument("--out", default="data/map.html")
+    sp.add_argument("--scheme", action="append", help="制度ID（複数指定可）")
+    sp.add_argument("--trade", help="業種で絞る")
+    sp.add_argument("--status", choices=["active", "expired", "revoked", "unknown"], help="状態で絞る")
+    sp.add_argument("--title", default="業者公認マップ")
+
     sub.add_parser("expire", help="有効期限切れの行を expired にする")
     sub.add_parser("monitor", help="掲載ページの変化を検知して再取得キューに入れる")
     sub.add_parser("schemes", help="制度の一覧")
@@ -144,6 +156,20 @@ def _run(a, conn) -> int:
         print(json.dumps({"records": len(records), **stats}, ensure_ascii=False))
     elif a.cmd == "fetch":
         return _fetch(conn, a)
+    elif a.cmd == "geo-update":
+        from . import geo
+        path = Path(a.file) if a.file else _download_large(geo.LATEST_CSV, Path("data/downloads/geolonia/latest.csv"))
+        print(f"町丁目 {geo.load_towns(conn, path)} 件の座標を取り込みました")
+    elif a.cmd == "map":
+        from . import geo, mapview
+        if not geo.has_towns(conn):
+            raise SystemExit("町丁目の座標がまだありません。先に `uv run gyosya-map geo-update` を実行してください。")
+        points, stats = mapview.collect(conn, schemes=a.scheme, trade=a.trade, status=a.status)
+        out = mapview.write_map(points, stats, a.out, a.title)
+        print(f"{out} に {stats.plotted} 件をプロットしました（所在地なし {stats.no_address} 件、"
+              f"位置が分からない住所 {len(stats.not_found)} 件）")
+        for addr in stats.not_found[:10]:
+            print(f"  位置が分からない: {addr}", file=sys.stderr)
     elif a.cmd == "check":
         r = check(conn, address=a.address, trade=a.trade, name=a.name, license_no=a.license,
                   business_address=a.business_address)
@@ -204,3 +230,19 @@ def _fetch(conn, a) -> int:
             stats = import_full_list(conn, scheme_id, records, doc_id=doc_id)
             print("  " + json.dumps({"records": len(records), **stats}, ensure_ascii=False))
     return 1 if failed else 0
+
+
+def _download_large(url: str, dest: Path) -> Path:
+    """大きなファイルを少しずつ保存する。"""
+    import urllib.request
+
+    from .ingest.fetch import USER_AGENT
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    print(f"ダウンロード中: {url}", file=sys.stderr)
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=300) as res, open(tmp, "wb") as f:
+        while chunk := res.read(1 << 20):
+            f.write(chunk)
+    tmp.replace(dest)
+    return dest
