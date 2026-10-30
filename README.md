@@ -18,6 +18,9 @@ uv sync
 uv run gyosya-map init
 ```
 
+版を上げたあとも `uv run gyosya-map init` を実行すれば、古いDBに足りない列を追加する。
+列の追加で直せない変更のときは `uv run gyosya-map init --reset` で作り直す（取り込んだ名簿は消えるが、原本は data/raw/ に残る）。
+
 川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`uv run gyosya-map schemes` で一覧）。
 
 ### 名簿のダウンロード

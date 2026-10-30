@@ -61,3 +61,26 @@ def test_cli_file_url_downloads_and_rejects_web_page(tmp_path, monkeypatch, caps
                  "--file", "https://example.invalid/meibo.xlsx"]) == 0
     from gyosya_map import db
     assert db.connect(dbp).execute("SELECT url FROM source_document").fetchone()[0] == "https://example.invalid/meibo.xlsx"
+
+
+def test_init_upgrades_old_db_and_reset(tmp_path, capsys):
+    import sqlite3
+
+    dbp = str(tmp_path / "old.db")
+    main(["--db", dbp, "init"])
+    # 列が足りない古いDBを作る（download_config が無い版の scheme）
+    c = sqlite3.connect(dbp)
+    c.execute("ALTER TABLE scheme DROP COLUMN download_config")
+    c.commit()
+    c.close()
+    capsys.readouterr()
+    assert main(["--db", dbp, "init"]) == 0
+    assert "scheme.download_config" in capsys.readouterr().out
+
+    # 列の追加では直せない（NOT NULL の列が無い）ときは作り直しを案内する
+    c = sqlite3.connect(dbp)
+    c.executescript("DROP TABLE municipality; CREATE TABLE municipality (code TEXT PRIMARY KEY, name TEXT);")
+    c.close()
+    assert main(["--db", dbp, "init"]) == 2
+    assert "--reset" in capsys.readouterr().err
+    assert main(["--db", dbp, "init", "--reset"]) == 0

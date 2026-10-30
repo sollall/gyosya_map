@@ -31,8 +31,58 @@ def connect(path: str | Path = "gyosya.db") -> sqlite3.Connection:
     return conn
 
 
-def init_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(resources.files("gyosya_map").joinpath("schema.sql").read_text("utf-8"))
+class SchemaError(RuntimeError):
+    pass
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> dict[str, sqlite3.Row]:
+    return {r["name"]: r for r in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def init_schema(conn: sqlite3.Connection) -> list[str]:
+    """表を作り、古いDBに足りない列を追加する。追加した「表.列」を返す。
+
+    NOT NULL で既定値のない列が足りないなど、列の追加では直せない場合は SchemaError。
+    """
+    script = resources.files("gyosya_map").joinpath("schema.sql").read_text("utf-8")
+    statements, buf = [], ""
+    for line in script.splitlines(keepends=True):
+        buf += line
+        if sqlite3.complete_statement(buf):
+            statements.append(buf.strip())
+            buf = ""
+    # 索引は、古い表に列を足してから作る（無い列への索引は作れない）
+    indexes = [st for st in statements if "CREATE INDEX" in st]
+    for st in statements:
+        if st not in indexes:
+            conn.execute(st)
+    ref = sqlite3.connect(":memory:")
+    ref.row_factory = sqlite3.Row
+    ref.executescript(script)
+    added, broken = [], []
+    for (table,) in ref.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"):
+        have = _columns(conn, table)
+        for name, col in _columns(ref, table).items():
+            if name in have:
+                continue
+            if col["pk"] or (col["notnull"] and col["dflt_value"] is None):
+                broken.append(f"{table}.{name}")
+                continue
+            default = f" DEFAULT {col['dflt_value']}" if col["dflt_value"] is not None else ""
+            notnull = " NOT NULL" if col["notnull"] else ""
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {col['type']}{notnull}{default}")
+            added.append(f"{table}.{name}")
+    ref.close()
+    if not broken:
+        for st in indexes:
+            conn.execute(st)
+    conn.commit()
+    if broken:
+        raise SchemaError(
+            f"DBの形式が古く、列の追加では更新できません（{', '.join(broken)}）。\n"
+            "`uv run gyosya-map init --reset` で作り直してください。取り込んだ名簿は消えますが、"
+            "原本は data/raw/ に残っているので取り込み直せます。")
+    return added
 
 
 def check_digit(code5: str) -> str:

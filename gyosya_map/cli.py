@@ -57,7 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--raw-dir", default="data/raw", help="原本の保存先")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("init", help="スキーマ作成と制度・管轄データの投入")
+    sp = sub.add_parser("init", help="スキーマ作成と制度・管轄データの投入（古いDBは列を追加して更新）")
+    sp.add_argument("--reset", action="store_true", help="DBを削除して作り直す（取り込んだ名簿も消える）")
 
     for name, help_ in (("import", "全件名簿の取り込み"), ("notice", "告示（差分）の取り込み"),
                         ("preview", "取り込まずに読み取り結果を表示")):
@@ -96,10 +97,12 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("schemes", help="制度の一覧")
 
     a = p.parse_args(argv)
+    if a.cmd == "init" and a.reset:
+        Path(a.db).unlink(missing_ok=True)
     conn = db.connect(a.db)
     try:
         return _run(a, conn)
-    except (KeyError, ValueError, OSError) as e:
+    except (KeyError, ValueError, OSError, db.SchemaError) as e:
         print(e.args[0] if e.args else e, file=sys.stderr)
         return 2
 
@@ -107,7 +110,9 @@ def main(argv: list[str] | None = None) -> int:
 def _run(a, conn) -> int:
 
     if a.cmd == "init":
-        db.init_schema(conn)
+        added = db.init_schema(conn)
+        if added:
+            print(f"古いDBに列を追加しました: {', '.join(added)}")
         db.load_seed(conn)
         n = conn.execute("SELECT count(*) FROM scheme").fetchone()[0]
         m = conn.execute("SELECT count(*) FROM municipality").fetchone()[0]
