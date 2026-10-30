@@ -18,7 +18,6 @@ from pathlib import Path
 
 from . import db, freshness
 from .ingest import ParserConfig, apply_notice_events, import_full_list, load_for_scheme, parse_file, store_document
-from .jurisdiction import AddressError
 from .matcher import check
 from .normalize import parse_date
 
@@ -28,6 +27,27 @@ def _config(conn, a) -> ParserConfig:
     if a.parser_config:
         return ParserConfig.from_json(a.parser_config)
     return load_for_scheme(conn, a.scheme)
+
+
+def _prepare_file(a) -> Path:
+    """--file がURLならダウンロードする。原本の取得元URL（--url）も補う。"""
+    if a.file.startswith(("http://", "https://")):
+        from .ingest.fetch import download
+        url = a.file
+        a.url = getattr(a, "url", None) or url
+        path = download(url)
+        if path.suffix.lower() in (".html", ".htm", "") or path.read_bytes()[:15].lstrip().lower().startswith(
+                (b"<!doctype", b"<html")):
+            raise SystemExit(f"{url} は名簿ファイルではなくWebページです。ページ内の名簿（Excel・PDF）のリンクを"
+                             "--file に指定してください。")
+        print(f"ダウンロードしました: {path}", file=sys.stderr)
+        return path
+    path = Path(a.file)
+    if not path.exists():
+        raise SystemExit(f"ファイルが見つかりません: {path}\n"
+                         "名簿の掲載ページから Excel・PDF をダウンロードし、そのパスを --file に指定してください"
+                         "（ファイルのURLを直接指定することもできます）。")
+    return path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
                         ("preview", "取り込まずに読み取り結果を表示")):
         sp = sub.add_parser(name, help=help_)
         sp.add_argument("--scheme", required=True)
-        sp.add_argument("--file", required=True, type=Path)
+        sp.add_argument("--file", required=True,
+                        help="名簿ファイルのパス、またはファイルそのもののURL（ダウンロードして取り込む）")
         sp.add_argument("--parser-config", help="読み込み設定のJSON（制度の設定を上書き）")
         if name == "preview":
             sp.add_argument("--notice", action="store_true", help="告示として読む")
@@ -67,6 +88,14 @@ def main(argv: list[str] | None = None) -> int:
 
     a = p.parse_args(argv)
     conn = db.connect(a.db)
+    try:
+        return _run(a, conn)
+    except (KeyError, ValueError) as e:
+        print(e.args[0] if e.args else e, file=sys.stderr)
+        return 2
+
+
+def _run(a, conn) -> int:
 
     if a.cmd == "init":
         db.init_schema(conn)
@@ -75,15 +104,20 @@ def main(argv: list[str] | None = None) -> int:
         m = conn.execute("SELECT count(*) FROM municipality").fetchone()[0]
         print(f"{a.db} を初期化しました（市区町村 {m} 件、制度 {n} 件）")
     elif a.cmd == "preview":
-        records = parse_file(a.file, _config(conn, a), notice=a.notice)
+        records = parse_file(_prepare_file(a), _config(conn, a), notice=a.notice)
         print(f"{len(records)} 件")
         for r in records[:a.limit]:
             print(json.dumps(r, ensure_ascii=False, default=str))
     elif a.cmd in ("import", "notice"):
         fetched = parse_date(a.fetched_at) if a.fetched_at else dt.date.today()
-        records = parse_file(a.file, _config(conn, a), notice=a.cmd == "notice")
+        path = _prepare_file(a)
+        records = parse_file(path, _config(conn, a), notice=a.cmd == "notice")
+        if not records:
+            # 0件で全件名簿を取り込むと、登録済みの行が全部「名簿から消えた」扱いになる
+            raise SystemExit("名簿の行を1件も読み取れませんでした。取り込みは中止しました。\n"
+                             "preview と --parser-config で見出しの行や列名を指定して試してください。")
         published = parse_date(a.date) if a.cmd == "notice" else None
-        doc_id, new = store_document(conn, a.scheme, a.file, kind="notice" if published else "full_list",
+        doc_id, new = store_document(conn, a.scheme, path, kind="notice" if published else "full_list",
                                      url=a.url, published_on=published, fetched_at=fetched, raw_dir=a.raw_dir)
         if not new:
             print("同じ原本は取り込み済みです", file=sys.stderr)
@@ -95,12 +129,8 @@ def main(argv: list[str] | None = None) -> int:
         conn.commit()
         print(json.dumps({"records": len(records), **stats}, ensure_ascii=False))
     elif a.cmd == "check":
-        try:
-            r = check(conn, address=a.address, trade=a.trade, name=a.name, license_no=a.license,
-                      business_address=a.business_address)
-        except (AddressError, KeyError, ValueError) as e:
-            print(e, file=sys.stderr)
-            return 2
+        r = check(conn, address=a.address, trade=a.trade, name=a.name, license_no=a.license,
+                  business_address=a.business_address)
         print(json.dumps(r.to_dict(), ensure_ascii=False, indent=2) if a.json else r.render())
     elif a.cmd == "expire":
         print(f"{freshness.expire(conn)} 件を期限切れにしました")

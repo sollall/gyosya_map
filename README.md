@@ -20,14 +20,30 @@ uv run gyosya-map init
 
 川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`uv run gyosya-map schemes` で一覧）。
 
+名簿はまず手元に用意する。たとえば神奈川県の解体工事業者名簿なら、
+[掲載ページ](https://www.pref.kanagawa.jp/docs/u2h/cnt/f531856/p449157.html)から Excel をダウンロードする。
+下の例のファイル名（`<ダウンロードした名簿>.xlsx` など）は、実際に保存したファイルのパスに置き換える。
+
 ```bash
-# 全件名簿（Excel / PDF / CSV）を取り込む。原本は data/raw/ に保存される
-uv run gyosya-map import --scheme pref-14.demolition --file 解体工事業者登録簿.xlsx \
+# 1. 取り込む前に、見出しと行が読み取れるか確かめる
+uv run gyosya-map preview --scheme pref-14.demolition --file ~/Downloads/<ダウンロードした名簿>.xlsx
+
+# 2. 全件名簿（Excel / PDF / CSV）を取り込む。原本は data/raw/ に保存される。--url は出典として記録する掲載ページ
+uv run gyosya-map import --scheme pref-14.demolition --file ~/Downloads/<ダウンロードした名簿>.xlsx \
   --url https://www.pref.kanagawa.jp/docs/u2h/cnt/f531856/p449157.html
 
-# 告示（差分）を古い順に積み上げる
-uv run gyosya-map notice --scheme kawasaki-suido.water --file 7422.pdf --date 2026-09-30
+# --file にはファイルそのもののURL（.xlsx / .pdf へのリンク）も指定できる。掲載ページ（HTML）のURLは不可
+uv run gyosya-map import --scheme pref-14.demolition --file https://www.pref.kanagawa.jp/<名簿ファイルのパス>.xlsx
 
+# 告示（差分）を古い順に積み上げる
+uv run gyosya-map notice --scheme kawasaki-suido.water --file https://www.city.kawasaki.jp/koho/cmsfiles/0000007/7422/7422.pdf \
+  --date 2026-09-30
+```
+
+読み取りが0件のときは、取り込みを中止する（登録済みの行を消してしまわないため）。
+`preview --parser-config '{"header_row": 3}'` のように読み込み設定を試して、合ったものを seed の `parser` に書く。
+
+```bash
 # 照合
 uv run gyosya-map check --address 川崎市中原区小杉町3丁目1 --trade water --license 123
 uv run gyosya-map check --address 川崎市幸区1 --trade 解体 --name サンプル解体 --json
