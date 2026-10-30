@@ -1,0 +1,41 @@
+{
+ "_comment": "国の機関と制度。都道府県・市区町村の機関は市区町村マスターから自動で作る。",
+ "authorities": [
+  {
+   "authority_id": "mlit",
+   "name": "国土交通大臣",
+   "level": "national"
+  },
+  {
+   "authority_id": "meti",
+   "name": "経済産業大臣",
+   "level": "national"
+  }
+ ],
+ "schemes": [
+  {
+   "scheme_id": "meti.electrical",
+   "authority_id": "meti",
+   "trade": "electrical",
+   "license_name": "登録電気工事業者（経済産業大臣登録）",
+   "validity_years": 5,
+   "publication_format": null,
+   "notes": [
+    {
+     "severity": "info",
+     "body": "2以上の都道府県に営業所を置く電気工事業者は経済産業大臣（産業保安監督部）の登録。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "mlit.construction",
+   "authority_id": "mlit",
+   "trade": "construction",
+   "license_name": "国土交通大臣 建設業許可",
+   "validity_years": 5,
+   "publication_format": "search_system",
+   "source_url": "https://etsuran2.mlit.go.jp/TAKKEN/kensetuKensaku.do",
+   "contact": "国土交通省 関東地方整備局"
+  }
+ ]
+}

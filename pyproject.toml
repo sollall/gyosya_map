@@ -20,7 +20,7 @@ packages = ["gyosya_map", "gyosya_map.ingest", "gyosya_map.seed"]
 
 [tool.setuptools.package-data]
 gyosya_map = ["schema.sql"]
-"gyosya_map.seed" = ["*.json"]
+"gyosya_map.seed" = ["*.json", "*.csv", "prefectures/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

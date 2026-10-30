@@ -9,7 +9,7 @@ from gyosya_map.ingest.csvfile import parse_csv
 from gyosya_map.ingest.excel import parse_excel
 from gyosya_map.ingest.pdf import classify_event, parse_notice_pdf, parse_pdf_list
 
-S = "pref-kanagawa.demolition"
+S = "pref-14.demolition"
 
 
 def _licensee(conn, scheme, no):
@@ -102,3 +102,60 @@ def test_notice_events_accumulate(conn, raw_dir, tmp_path):
                         doc_id=doc, notice_date=dt.date(2026, 10, 30), today=TODAY)
     row = _licensee(conn, w, "401")
     assert row["name"] == "サンプル管工合同会社" and row["valid_until"] == "2031-09-29"
+
+
+def test_parser_config_columns_header_row_and_skip(tmp_path):
+    from gyosya_map.ingest import ParserConfig, parse_file
+
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "表紙"
+    ws.append(["番号", "名称"])                      # 読まないシート
+    ws.append(["X", "表紙の行"])
+    ws2 = wb.create_sheet("一覧")
+    ws2.append(["令和8年10月1日現在"])
+    ws2.append(["No.", "登録番号（知事）", "屋号", "営業所", "期限"])
+    ws2.append([1, "A-1", "サンプル電設", "川崎市", "令和12年3月31日"])
+    ws2.append([None, "-", "以下余白", None, None])
+    f = tmp_path / "x.xlsx"
+    wb.save(f)
+    cfg = ParserConfig(sheets=["一覧"], header_row=2, columns={"license_no": "登録番号（知事）", "valid_until": 5},
+                       aliases={"name": ["屋号"], "address": ["営業所"]}, skip_pattern="以下余白")
+    assert parse_file(f, cfg) == [{"license_no": "A-1", "name": "サンプル電設", "address": "川崎市",
+                                  "valid_until": "令和12年3月31日"}]
+
+
+def test_parser_config_validation():
+    import pytest
+
+    from gyosya_map.ingest import ParserConfig
+    with pytest.raises(ValueError):
+        ParserConfig(format="html")
+    with pytest.raises(ValueError):
+        ParserConfig(columns={"phone": 3})
+    with pytest.raises(ValueError):
+        ParserConfig(default_event="delete")
+
+
+def test_notice_config_events_and_default(tmp_path):
+    from gyosya_map.ingest import ParserConfig, parse_file
+
+    header = ["指定番号", "氏名又は名称", "住所"]
+    f = make_pdf(tmp_path / "n.pdf", [("指定の効力を失った事業者", [header, ["9", "見本設備", "川崎市"]])])
+    assert parse_file(f, ParserConfig(events={"revoke": ["効力を失った"]}), notice=True)[0]["event"] == "revoke"
+    f2 = make_pdf(tmp_path / "n2.pdf", [("告示第100号", [header, ["8", "見本設備", "川崎市"]])])
+    assert parse_file(f2, notice=True) == []                                  # 種類が分からない行は捨てる
+    assert parse_file(f2, ParserConfig(default_event="new"), notice=True)[0]["event"] == "new"
+
+
+def test_scheme_parser_config_from_seed(conn):
+    from gyosya_map import db
+    from gyosya_map.ingest import load_for_scheme
+
+    db.load_seed_data(conn, {"prefecture": "14", "schemes": [{
+        "scheme_id": "muni-142051.waste", "authority_id": "muni-142051", "trade": "waste",
+        "license_name": "藤沢市一般廃棄物収集運搬業許可", "parser": {"header_row": 4, "aliases": {"name": ["屋号"]}}}],
+        "municipalities": {"藤沢市": {"public_sewer": True}}})
+    cfg = load_for_scheme(conn, "muni-142051.waste")
+    assert cfg.header_row == 4 and cfg.aliases == {"name": ["屋号"]}

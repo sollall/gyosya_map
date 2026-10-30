@@ -1,7 +1,7 @@
 -- 制度（どの機関がどの公認を出すか）と名簿（誰が公認を受けているか）を分けて持つ。
 
 CREATE TABLE IF NOT EXISTS authority (
-    authority_id TEXT PRIMARY KEY,          -- 例: kawasaki-suido, pref-kanagawa
+    authority_id TEXT PRIMARY KEY,          -- 例: pref-14, muni-141305（自動）、kawasaki-suido
     name         TEXT NOT NULL,             -- 例: 川崎市上下水道局
     level        TEXT NOT NULL CHECK (level IN ('national', 'prefecture', 'municipality', 'water_utility')),
     parent_id    TEXT REFERENCES authority(authority_id)
@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS scheme (
     contact            TEXT,
     terms_of_use       TEXT,                -- 公開資料の再利用条件
     required_sub_scope TEXT,                -- 範囲として必須の項目（例: 一時多量ごみ）
+    parser_config      TEXT,                -- 名簿の読み込み設定（JSON。ingest/config.py）
     verified_at        TEXT
 );
 CREATE INDEX IF NOT EXISTS scheme_trade ON scheme(trade, authority_id);
@@ -73,17 +74,22 @@ CREATE TABLE IF NOT EXISTS roster_fetch (
 );
 
 -- 管轄解決
+-- 市区町村マスター（seed/municipalities.csv）。政令市は市の行と行政区の行の両方を持つ。
 CREATE TABLE IF NOT EXISTS municipality (
     code            TEXT PRIMARY KEY,       -- 全国地方公共団体コード6桁
     pref_code       TEXT NOT NULL,          -- 2桁
-    name            TEXT NOT NULL,          -- 例: 川崎市中原区
-    city_name       TEXT,                   -- 区の場合の市名（例: 川崎市）
-    kind            TEXT NOT NULL,          -- prefecture / designated_city / ward / city / town / village / special_ward
-    health_center_city INTEGER NOT NULL DEFAULT 0, -- 保健所設置市
+    pref_name       TEXT NOT NULL,
+    name            TEXT NOT NULL,          -- 郡名を除いた名前（例: 愛川町、川崎市中原区）
+    gun             TEXT,                   -- 郡名（例: 愛甲郡）
+    city_code       TEXT,                   -- 行政区の場合の市のコード
+    kind            TEXT NOT NULL CHECK (kind IN
+                      ('designated_city', 'ward', 'special_ward', 'city', 'town', 'village')),
+    health_center_city INTEGER NOT NULL DEFAULT 0, -- 保健所設置市（政令市・中核市・特別区など）
     public_sewer    INTEGER NOT NULL DEFAULT 1     -- 公共下水道の有無
 );
+CREATE INDEX IF NOT EXISTS municipality_pref ON municipality(pref_code);
 
--- 業種ごとの担当機関（市区町村コード単位）
+-- 既定ルール（jurisdiction.py）と違う担当機関だけを持つ。市の行に書けば行政区にも効く。
 CREATE TABLE IF NOT EXISTS jurisdiction (
     code         TEXT NOT NULL REFERENCES municipality(code),
     trade        TEXT NOT NULL,

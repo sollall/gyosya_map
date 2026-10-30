@@ -1,0 +1,158 @@
+{
+ "_comment": "神奈川県（フェーズ0）。担当機関は jurisdiction.py の既定ルールで決まり、ここには既定と違うものだけを書く。publication_format が null の制度は公開形式が未調査。横浜市は「他機関の公認」の判定用に水道のみ収録。",
+ "prefecture": "14",
+ "authorities": [
+  {
+   "authority_id": "kawasaki-suido",
+   "name": "川崎市上下水道局",
+   "level": "water_utility",
+   "parent_id": "muni-141305"
+  },
+  {
+   "authority_id": "yokohama-suido",
+   "name": "横浜市水道局",
+   "level": "water_utility",
+   "parent_id": "muni-141003"
+  }
+ ],
+ "schemes": [
+  {
+   "scheme_id": "kawasaki-suido.water",
+   "authority_id": "kawasaki-suido",
+   "trade": "water",
+   "license_name": "川崎市指定給水装置工事事業者",
+   "validity_years": 5,
+   "publication_format": "notice_diff",
+   "source_url": "https://www.city.kawasaki.jp/koho/cmsfiles/0000007/7422/7422.pdf",
+   "contact": "川崎市上下水道局",
+   "verified_at": "2026-10-30",
+   "notes": [
+    {
+     "severity": "info",
+     "body": "指定の新規・更新・変更・廃止は毎月末に告示される。告示の積み上げで名簿を作るため、過去分が欠ける可能性がある。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "kawasaki-suido.sewer",
+   "authority_id": "kawasaki-suido",
+   "trade": "sewer",
+   "license_name": "川崎市排水設備指定工事店",
+   "publication_format": "notice_diff",
+   "source_url": "https://www.city.kawasaki.jp/koho/cmsfiles/0000006/6517/6517.pdf",
+   "contact": "川崎市上下水道局",
+   "verified_at": "2026-10-30"
+  },
+  {
+   "scheme_id": "muni-141305.waste",
+   "authority_id": "muni-141305",
+   "trade": "waste",
+   "license_name": "川崎市一般廃棄物収集運搬業許可",
+   "validity_years": 2,
+   "publication_format": null,
+   "source_url": "https://www.city.kawasaki.jp/300/cmsfiles/contents/0000062/62414/20250401ichijitaryousyorigyokyokashinseitebiki.pdf",
+   "contact": "川崎市環境局",
+   "required_sub_scope": "一時多量ごみ",
+   "verified_at": "2026-10-30",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "家庭の不用品回収・遺品整理（一時多量ごみ）は、一般廃棄物収集運搬業の許可のうち「一時多量ごみ」を範囲に含む許可が別に必要。"
+    },
+    {
+     "severity": "info",
+     "body": "一時多量ごみの収集制度: https://www.city.kawasaki.jp/300/cmsfiles/contents/0000113/113718/ichijitaryo.pdf"
+    }
+   ]
+  },
+  {
+   "scheme_id": "muni-141305.septic-maintenance",
+   "authority_id": "muni-141305",
+   "trade": "septic",
+   "license_name": "川崎市浄化槽保守点検業者登録",
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.city.kawasaki.jp/kurashi/category/24-1-14-6-0-0-0-0-0-0.html",
+   "contact": "川崎市",
+   "verified_at": "2026-10-30",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "川崎市では浄化槽の清掃は市の直営。清掃を請け負う許可業者はいない（https://www.city.kawasaki.jp/kurashi/category/262-1-8-0-0-0-0-0-0-0.html）。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-14.electrical",
+   "authority_id": "pref-14",
+   "trade": "electrical",
+   "license_name": "神奈川県登録電気工事業者",
+   "validity_years": 5,
+   "publication_format": null,
+   "source_url": "https://www.pref.kanagawa.jp/documents/85947/tebiki_4.pdf",
+   "contact": "神奈川県",
+   "verified_at": "2026-10-30"
+  },
+  {
+   "scheme_id": "pref-14.demolition",
+   "authority_id": "pref-14",
+   "trade": "demolition",
+   "license_name": "神奈川県解体工事業登録",
+   "validity_years": 5,
+   "publication_format": "full_list_excel",
+   "source_url": "https://www.pref.kanagawa.jp/docs/u2h/cnt/f531856/p449157.html",
+   "contact": "神奈川県",
+   "verified_at": "2026-10-30",
+   "notes": [
+    {
+     "severity": "info",
+     "body": "建設業許可（土木工事業・建築工事業・解体工事業）があれば解体工事業登録は不要。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-14.construction",
+   "authority_id": "pref-14",
+   "trade": "construction",
+   "license_name": "神奈川県知事 建設業許可",
+   "validity_years": 5,
+   "publication_format": "search_system",
+   "source_url": "https://etsuran2.mlit.go.jp/TAKKEN/kensetuKensaku.do",
+   "contact": "神奈川県",
+   "notes": [
+    {
+     "severity": "info",
+     "body": "請負代金500万円以上（建築一式は1,500万円以上）の工事に必要。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "yokohama-suido.water",
+   "authority_id": "yokohama-suido",
+   "trade": "water",
+   "license_name": "横浜市指定給水装置工事事業者",
+   "validity_years": 5,
+   "publication_format": null,
+   "contact": "横浜市水道局"
+  }
+ ],
+ "municipalities": {
+  "川崎市": {
+   "jurisdiction": {
+    "water": [
+     "kawasaki-suido"
+    ],
+    "sewer": [
+     "kawasaki-suido"
+    ]
+   }
+  },
+  "横浜市": {
+   "jurisdiction": {
+    "water": [
+     "yokohama-suido"
+    ]
+   }
+  }
+ },
+ "overrides": []
+}

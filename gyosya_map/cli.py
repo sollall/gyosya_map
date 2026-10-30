@@ -3,6 +3,7 @@
   python -m gyosya_map init                                  # DB作成＋制度・管轄データ投入
   python -m gyosya_map import  --scheme ID --file 名簿.xlsx   # 全件名簿（xlsx / pdf / csv）
   python -m gyosya_map notice  --scheme ID --file 告示.pdf --date 2026-09-30
+  python -m gyosya_map preview --scheme ID --file 名簿.xlsx   # 取り込まずに読み取り結果を確認
   python -m gyosya_map check   --address 住所 --trade water --license 123
   python -m gyosya_map expire | monitor | schemes
 """
@@ -16,24 +17,17 @@ import sys
 from pathlib import Path
 
 from . import db, freshness
-from .ingest import apply_notice_events, import_full_list, store_document
-from .ingest.csvfile import parse_csv
-from .ingest.excel import parse_excel
-from .ingest.pdf import parse_notice_pdf, parse_pdf_list
+from .ingest import ParserConfig, apply_notice_events, import_full_list, load_for_scheme, parse_file, store_document
 from .jurisdiction import AddressError
 from .matcher import check
 from .normalize import parse_date
 
 
-def _parse_file(path: Path, notice: bool) -> list[dict]:
-    ext = path.suffix.lower()
-    if ext in (".xlsx", ".xlsm"):
-        return parse_excel(path)
-    if ext == ".csv":
-        return parse_csv(path)
-    if ext == ".pdf":
-        return parse_notice_pdf(path) if notice else parse_pdf_list(path)
-    raise SystemExit(f"未対応の形式です: {path}")
+def _config(conn, a) -> ParserConfig:
+    """制度の読み込み設定。--parser-config で一時的に差し替えられる（seed に書く前の試行用）。"""
+    if a.parser_config:
+        return ParserConfig.from_json(a.parser_config)
+    return load_for_scheme(conn, a.scheme)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,10 +38,16 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("init", help="スキーマ作成と制度・管轄データの投入")
 
-    for name in ("import", "notice"):
-        sp = sub.add_parser(name, help="全件名簿の取り込み" if name == "import" else "告示（差分）の取り込み")
+    for name, help_ in (("import", "全件名簿の取り込み"), ("notice", "告示（差分）の取り込み"),
+                        ("preview", "取り込まずに読み取り結果を表示")):
+        sp = sub.add_parser(name, help=help_)
         sp.add_argument("--scheme", required=True)
         sp.add_argument("--file", required=True, type=Path)
+        sp.add_argument("--parser-config", help="読み込み設定のJSON（制度の設定を上書き）")
+        if name == "preview":
+            sp.add_argument("--notice", action="store_true", help="告示として読む")
+            sp.add_argument("--limit", type=int, default=5)
+            continue
         sp.add_argument("--url", help="原本の取得元URL")
         sp.add_argument("--fetched-at", help="取得日（既定: 今日）")
         if name == "notice":
@@ -72,10 +72,16 @@ def main(argv: list[str] | None = None) -> int:
         db.init_schema(conn)
         db.load_seed(conn)
         n = conn.execute("SELECT count(*) FROM scheme").fetchone()[0]
-        print(f"{a.db} を初期化しました（制度 {n} 件）")
+        m = conn.execute("SELECT count(*) FROM municipality").fetchone()[0]
+        print(f"{a.db} を初期化しました（市区町村 {m} 件、制度 {n} 件）")
+    elif a.cmd == "preview":
+        records = parse_file(a.file, _config(conn, a), notice=a.notice)
+        print(f"{len(records)} 件")
+        for r in records[:a.limit]:
+            print(json.dumps(r, ensure_ascii=False, default=str))
     elif a.cmd in ("import", "notice"):
         fetched = parse_date(a.fetched_at) if a.fetched_at else dt.date.today()
-        records = _parse_file(a.file, a.cmd == "notice")
+        records = parse_file(a.file, _config(conn, a), notice=a.cmd == "notice")
         published = parse_date(a.date) if a.cmd == "notice" else None
         doc_id, new = store_document(conn, a.scheme, a.file, kind="notice" if published else "full_list",
                                      url=a.url, published_on=published, fetched_at=fetched, raw_dir=a.raw_dir)

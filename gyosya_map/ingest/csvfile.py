@@ -10,28 +10,32 @@ import csv
 from pathlib import Path
 
 from .columns import ALIASES, extract, find_header
+from .config import ParserConfig
 from .pdf import classify_event
 
 
-def parse_csv(path: str | Path) -> list[dict]:
+def parse_csv(path: str | Path, config: ParserConfig | None = None) -> list[dict]:
+    config = config or ParserConfig()
     with open(path, encoding="utf-8-sig", newline="") as f:
         rows = list(csv.reader(f))
     if not rows:
         return []
     header = rows[0]
-    if all(h.strip() in ALIASES for h in header if h.strip()):
+    if not config.columns and not config.header_row and all(h.strip() in ALIASES for h in header if h.strip()):
         mapping = {h.strip(): i for i, h in enumerate(header) if h.strip()}
         start = 0
     else:
-        found = find_header(rows)
+        found = find_header(rows, config)
         if not found:
             raise ValueError(f"見出し行（番号・名称）が見つかりません: {path}")
         start, mapping = found
     records = []
     for row in rows[start + 1:]:
-        rec = extract(row, mapping)
+        rec = extract(row, mapping, config)
         if rec:
             if rec.get("event") and rec["event"] not in ("new", "renew", "change", "revoke"):
-                rec["event"] = classify_event(rec["event"])
+                rec["event"] = classify_event(rec["event"], config)
+            if config.default_event and not rec.get("event"):
+                rec["event"] = config.default_event
             records.append(rec)
     return records

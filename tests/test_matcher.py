@@ -71,7 +71,7 @@ def test_notice_diff_not_found_is_undetermined(conn):
 
 
 def test_high_completeness_not_found(conn):
-    _full(conn, "city-kawasaki.septic-maintenance", [{"license_no": "201", "name": "見本メンテ"}])
+    _full(conn, "muni-141305.septic-maintenance", [{"license_no": "201", "name": "見本メンテ"}])
     r = check(conn, address=KAWASAKI, trade="septic", name="載っていない業者", today=TODAY)
     assert r.verdict == NOT_FOUND
     # important の注意点は必ず出る
@@ -79,7 +79,7 @@ def test_high_completeness_not_found(conn):
 
 
 def test_demolition_requires_both_sources_to_conclude(conn):
-    _full(conn, "pref-kanagawa.demolition", [{"license_no": "D1", "name": "サンプル解体"}])
+    _full(conn, "pref-14.demolition", [{"license_no": "D1", "name": "サンプル解体"}])
     assert check(conn, address=KAWASAKI, trade="demolition", name="サンプル解体", today=TODAY).verdict == AUTHORIZED
     # 解体登録に無くても建設業許可を確かめられないので判定不能
     r = check(conn, address=KAWASAKI, trade="demolition", name="無登録解体", today=TODAY)
@@ -96,8 +96,8 @@ def test_demolition_requires_both_sources_to_conclude(conn):
 
 
 def test_waste_sub_scope(conn):
-    conn.execute("UPDATE scheme SET publication_format = 'full_list_pdf' WHERE scheme_id = 'city-kawasaki.waste'")
-    _full(conn, "city-kawasaki.waste", [
+    conn.execute("UPDATE scheme SET publication_format = 'full_list_pdf' WHERE scheme_id = 'muni-141305.waste'")
+    _full(conn, "muni-141305.waste", [
         {"license_no": "W1", "name": "範囲あり回収", "sub_scope": "一時多量ごみ・事業系"},
         {"license_no": "W2", "name": "範囲なし回収", "sub_scope": "事業系一般廃棄物"},
     ])
@@ -123,7 +123,7 @@ def test_requires_name_or_number(conn):
 
 
 def test_stale_roster_warning_and_auto_expire(conn):
-    _full(conn, "pref-kanagawa.demolition",
+    _full(conn, "pref-14.demolition",
           [{"license_no": "D9", "name": "期限間近解体", "valid_until": "2026-11-15"}],
           fetched_at=TODAY - dt.timedelta(days=91))
     r = check(conn, address=KAWASAKI, trade="demolition", name="期限間近解体", today=TODAY)
@@ -134,7 +134,7 @@ def test_stale_roster_warning_and_auto_expire(conn):
 
 
 def test_representative_not_in_result(conn):
-    _full(conn, "pref-kanagawa.demolition", [{"license_no": "D2", "name": "表示テスト", "representative": "見本 太郎"}])
+    _full(conn, "pref-14.demolition", [{"license_no": "D2", "name": "表示テスト", "representative": "見本 太郎"}])
     r = check(conn, address=KAWASAKI, trade="demolition", name="表示テスト", today=TODAY)
     assert "見本 太郎" not in str(r.to_dict()) and "見本 太郎" not in r.render()
 
@@ -155,3 +155,17 @@ def test_page_monitor_queues_changes_and_errors(conn):
     assert second[url] == "changed"
     reasons = [r[0] for r in conn.execute("SELECT reason FROM refetch_queue WHERE url = ?", (url,))]
     assert reasons == ["掲載ページが変化"]
+
+
+def test_new_prefecture_needs_only_schemes(conn):
+    """既定ルールがあるので、他県は機関と制度を書くだけで照合できる。"""
+    from gyosya_map import db
+    db.load_seed_data(conn, {"prefecture": "13", "schemes": [{
+        "scheme_id": "pref-13.demolition", "authority_id": "pref-13", "trade": "demolition",
+        "license_name": "東京都解体工事業登録", "validity_years": 5, "publication_format": "full_list_excel"}]})
+    _full(conn, "pref-13.demolition", [{"license_no": "T1", "name": "サンプル解体"}])
+    r = check(conn, address="東京都府中市宮西町1", trade="demolition", name="サンプル解体", today=TODAY)
+    assert r.verdict == AUTHORIZED and r.message.startswith("東京都の東京都解体工事業登録あり")
+    # 神奈川県の住所で照会すると、東京都の登録は他機関の公認
+    r = check(conn, address=KAWASAKI, trade="demolition", license_no="T1", today=TODAY)
+    assert r.verdict == OTHER_ONLY

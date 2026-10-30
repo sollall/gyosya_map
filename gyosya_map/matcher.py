@@ -280,8 +280,10 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
                 reasons.append(f"{s.license_name}は検索システムでの確認が必要")
             elif s.publication_format in ("full_list_excel", "full_list_pdf"):
                 reasons.append(f"{s.license_name}の名簿が未取得")
-            else:
+            elif s.publication_format == "phone_only":
                 reasons.append(f"{s.license_name}の名簿が公開されていない")
+            else:
+                reasons.append(f"{s.license_name}の公開形式が未調査")
         contacts = "・".join(dict.fromkeys(s.contact for s in lacking if s.contact))
         result.message = (f"判定できません（{'／'.join(reasons)}）。"
                           + (f"担当課（{contacts}）へ確認してください" if contacts else ""))
