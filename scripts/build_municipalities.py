@@ -1,7 +1,7 @@
 """Geolonia 住所データ（latest.csv）から市区町村マスター gyosya_map/seed/municipalities.csv を作る。
 
   curl -sSLO https://raw.githubusercontent.com/geolonia/japanese-addresses/master/data/latest.csv
-  python scripts/build_municipalities.py latest.csv
+  uv run python scripts/build_municipalities.py latest.csv
 
 出典: Geolonia 住所データ（CC BY 4.0） https://github.com/geolonia/japanese-addresses
 政令市そのものの行は元データに無いため、行政区から作る（市のコード = 最小の区コードの1の位を0にしたもの）。

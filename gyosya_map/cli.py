@@ -1,11 +1,11 @@
 """コマンドライン。
 
-  python -m gyosya_map init                                  # DB作成＋制度・管轄データ投入
-  python -m gyosya_map import  --scheme ID --file 名簿.xlsx   # 全件名簿（xlsx / pdf / csv）
-  python -m gyosya_map notice  --scheme ID --file 告示.pdf --date 2026-09-30
-  python -m gyosya_map preview --scheme ID --file 名簿.xlsx   # 取り込まずに読み取り結果を確認
-  python -m gyosya_map check   --address 住所 --trade water --license 123
-  python -m gyosya_map expire | monitor | schemes
+  uv run gyosya-map init                                  # DB作成＋制度・管轄データ投入
+  uv run gyosya-map import  --scheme ID --file 名簿.xlsx   # 全件名簿（xlsx / pdf / csv）
+  uv run gyosya-map notice  --scheme ID --file 告示.pdf --date 2026-09-30
+  uv run gyosya-map preview --scheme ID --file 名簿.xlsx   # 取り込まずに読み取り結果を確認
+  uv run gyosya-map check   --address 住所 --trade water --license 123
+  uv run gyosya-map expire | monitor | schemes
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _config(conn, a) -> ParserConfig:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="gyosya_map", description="自治体別 業者公認確認データベース")
+    p = argparse.ArgumentParser(prog="gyosya-map", description="自治体別 業者公認確認データベース")
     p.add_argument("--db", default="gyosya.db")
     p.add_argument("--raw-dir", default="data/raw", help="原本の保存先")
     sub = p.add_subparsers(dest="cmd", required=True)

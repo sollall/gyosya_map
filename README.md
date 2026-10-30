@@ -11,29 +11,31 @@
 
 ## 使い方
 
+[uv](https://docs.astral.sh/uv/) を使う。`uv sync` で依存（テスト用の dev グループを含む）を入れる。
+
 ```bash
-pip install -e '.[test]'
-python -m gyosya_map init
+uv sync
+uv run gyosya-map init
 ```
 
-川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`python -m gyosya_map schemes` で一覧）。
+川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`uv run gyosya-map schemes` で一覧）。
 
 ```bash
 # 全件名簿（Excel / PDF / CSV）を取り込む。原本は data/raw/ に保存される
-python -m gyosya_map import --scheme pref-14.demolition --file 解体工事業者登録簿.xlsx \
+uv run gyosya-map import --scheme pref-14.demolition --file 解体工事業者登録簿.xlsx \
   --url https://www.pref.kanagawa.jp/docs/u2h/cnt/f531856/p449157.html
 
 # 告示（差分）を古い順に積み上げる
-python -m gyosya_map notice --scheme kawasaki-suido.water --file 7422.pdf --date 2026-09-30
+uv run gyosya-map notice --scheme kawasaki-suido.water --file 7422.pdf --date 2026-09-30
 
 # 照合
-python -m gyosya_map check --address 川崎市中原区小杉町3丁目1 --trade water --license 123
-python -m gyosya_map check --address 川崎市幸区1 --trade 解体 --name サンプル解体 --json
+uv run gyosya-map check --address 川崎市中原区小杉町3丁目1 --trade water --license 123
+uv run gyosya-map check --address 川崎市幸区1 --trade 解体 --name サンプル解体 --json
 
 # 定期処理（月1回など）
-python -m gyosya_map expire    # 有効期限切れの行を expired に
-python -m gyosya_map monitor   # 掲載ページのハッシュ監視 → 変化・取得失敗を再取得キューへ
-python -m gyosya_map schemes   # 制度の一覧と名簿の取得日
+uv run gyosya-map expire    # 有効期限切れの行を expired に
+uv run gyosya-map monitor   # 掲載ページのハッシュ監視 → 変化・取得失敗を再取得キューへ
+uv run gyosya-map schemes   # 制度の一覧と名簿の取得日
 ```
 
 業種: `water` 水道 / `sewer` 下水・排水 / `waste` 不用品回収・遺品整理 / `septic` 浄化槽 / `electrical` 電気工事 /
@@ -90,7 +92,7 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 - `municipalities` のキーは都道府県内の名前か団体コード。政令市に書いた例外は行政区にも効く。
 - `parser` は名簿の読み込み設定（見出しの行・列名・シート・告示の見出し語など。`ingest/config.py`）。
   自治体ごとの書式の違いはコードを変えずにここで吸収する。書く前に
-  `python -m gyosya_map preview --scheme ID --file 名簿.xlsx --parser-config '{"header_row": 3}'` で読み取りを確かめる。
+  `uv run gyosya-map preview --scheme ID --file 名簿.xlsx --parser-config '{"header_row": 3}'` で読み取りを確かめる。
 
 ### 住所の解析
 
@@ -129,7 +131,7 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 ## テスト
 
 ```bash
-python -m pytest
+uv run pytest
 ```
 
 テストの名簿・告示はすべて架空の業者で、Excel・PDFはテスト内で生成している。

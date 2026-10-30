@@ -9,8 +9,8 @@ description = "自治体別 業者公認確認データベース"
 requires-python = ">=3.10"
 dependencies = ["openpyxl>=3.1", "pdfplumber>=0.11"]
 
-[project.optional-dependencies]
-test = ["pytest>=8", "reportlab>=4"]
+[dependency-groups]
+dev = ["pytest>=8", "reportlab>=4"]
 
 [project.scripts]
 gyosya-map = "gyosya_map.cli:main"
