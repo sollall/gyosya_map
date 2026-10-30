@@ -107,7 +107,10 @@
      "severity": "info",
      "body": "建設業許可（土木工事業・建築工事業・解体工事業）があれば解体工事業登録は不要。"
     }
-   ]
+   ],
+   "download": {
+    "href_pattern": "\\.(xlsx|xls)$"
+   }
   },
   {
    "scheme_id": "pref-14.construction",

@@ -20,7 +20,34 @@ uv run gyosya-map init
 
 川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`uv run gyosya-map schemes` で一覧）。
 
-名簿はまず手元に用意する。たとえば神奈川県の解体工事業者名簿なら、
+### 名簿のダウンロード
+
+制度ごとに登録してある掲載ページ（`source_url`）を開き、ページ内の Excel・PDF・CSV へのリンクから名簿を探してダウンロードする。
+同じホストへのアクセスは10秒以上あける。
+
+```bash
+# 掲載ページにあるファイルのリンクを一覧する（どれが名簿か確かめる）
+uv run gyosya-map fetch --scheme pref-14.demolition --list
+
+# ダウンロードして取り込む（data/downloads/<制度ID>/<日付>/ に保存。前回と同じファイルなら取り込みは省略）
+uv run gyosya-map fetch --scheme pref-14.demolition --import
+
+# 掲載ページが分かっている全件名簿型の制度をまとめて（月1回の定期実行向け）
+uv run gyosya-map fetch --all --import
+```
+
+ページに名簿以外のファイル（申請の手引きなど）もある場合は、seed の制度に `download` を書いて絞る。
+既定では条件に合う最初のリンクを取る。
+
+```json
+"download": {"text_pattern": "登録業者名簿", "href_pattern": "\\.xlsx?$", "pick": "first"}
+```
+
+告示（差分）型はダウンロードまで。取り込みには告示日が要るので `notice --date` で行う。
+
+### 手元のファイルを取り込む
+
+ダウンロード済みのファイルを直接渡すこともできる。たとえば神奈川県の解体工事業者名簿なら、
 [掲載ページ](https://www.pref.kanagawa.jp/docs/u2h/cnt/f531856/p449157.html)から Excel をダウンロードする。
 下の例のファイル名（`<ダウンロードした名簿>.xlsx` など）は、実際に保存したファイルのパスに置き換える。
 
@@ -130,7 +157,7 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 | `gyosya_map/seed/` | 市区町村マスター、保健所設置市、国の制度、都道府県ごとの制度と例外 |
 | `gyosya_map/jurisdiction.py` | 住所 → 市区町村コード → 業種ごとの担当機関（既定ルール、例外、町丁目の上書き） |
 | `gyosya_map/normalize.py` | 商号（法人格・全角半角・空白・旧字体）、番号、住所、和暦の正規化 |
-| `gyosya_map/ingest/` | 公開形式ごとのパーサー（Excel・PDF・告示PDF・CSV）と制度ごとの読み込み設定、原本保存、取得とページ監視 |
+| `gyosya_map/ingest/` | 公開形式ごとのパーサー（Excel .xlsx/.xls・PDF・告示PDF・CSV）と制度ごとの読み込み設定、名簿のダウンロード、原本保存、ページ監視 |
 | `gyosya_map/matcher.py` | 照合ロジックと判定 |
 | `gyosya_map/freshness.py` | 期限の自動処理、90日警告 |
 

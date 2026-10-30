@@ -11,7 +11,7 @@ import sqlite3
 import time
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 USER_AGENT = "gyosya_map/0.1 (+https://github.com/sollall/gyosya_map)"
 MIN_INTERVAL = 10.0
@@ -33,7 +33,7 @@ def fetch(url: str, *, timeout: float = 60.0) -> bytes:
 
 def download(url: str, dest_dir: str | Path = "data/downloads") -> Path:
     body = fetch(url)
-    name = Path(urlparse(url).path).name or "index.html"
+    name = unquote(Path(urlparse(url).path).name) or "index.html"
     dest = Path(dest_dir) / dt.date.today().isoformat() / name
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(body)

@@ -110,6 +110,7 @@ def load_seed_data(conn: sqlite3.Connection, data: dict) -> None:
         for s in data.get("schemes", []):
             values = {k: s.get(k) for k in _SCHEME_FIELDS}
             values["parser_config"] = json.dumps(s["parser"], ensure_ascii=False) if s.get("parser") else None
+            values["download_config"] = json.dumps(s["download"], ensure_ascii=False) if s.get("download") else None
             conn.execute(
                 f"""INSERT INTO scheme ({', '.join(values)}) VALUES ({', '.join(':' + k for k in values)})
                     ON CONFLICT(scheme_id) DO UPDATE SET

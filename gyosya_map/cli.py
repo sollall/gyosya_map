@@ -4,6 +4,7 @@
   uv run gyosya-map import  --scheme ID --file 名簿.xlsx   # 全件名簿（xlsx / pdf / csv）
   uv run gyosya-map notice  --scheme ID --file 告示.pdf --date 2026-09-30
   uv run gyosya-map preview --scheme ID --file 名簿.xlsx   # 取り込まずに読み取り結果を確認
+  uv run gyosya-map fetch   --scheme ID --import             # 掲載ページから名簿をダウンロードして取り込む
   uv run gyosya-map check   --address 住所 --trade water --license 123
   uv run gyosya-map expire | monitor | schemes
 """
@@ -82,6 +83,14 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--business-address", help="業者の所在地（同名業者の絞り込み）")
     sp.add_argument("--json", action="store_true")
 
+    sp = sub.add_parser("fetch", help="掲載ページから名簿ファイルを探してダウンロードする")
+    g = sp.add_mutually_exclusive_group(required=True)
+    g.add_argument("--scheme", help="制度ID")
+    g.add_argument("--all", action="store_true", help="掲載ページが分かっている全件名簿型の制度すべて")
+    sp.add_argument("--list", action="store_true", help="ダウンロードせず、ページ内のファイルのリンクを一覧する")
+    sp.add_argument("--import", dest="do_import", action="store_true", help="ダウンロード後に取り込む（全件名簿のみ）")
+    sp.add_argument("--dest", default="data/downloads", help="保存先")
+
     sub.add_parser("expire", help="有効期限切れの行を expired にする")
     sub.add_parser("monitor", help="掲載ページの変化を検知して再取得キューに入れる")
     sub.add_parser("schemes", help="制度の一覧")
@@ -90,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     conn = db.connect(a.db)
     try:
         return _run(a, conn)
-    except (KeyError, ValueError) as e:
+    except (KeyError, ValueError, OSError) as e:
         print(e.args[0] if e.args else e, file=sys.stderr)
         return 2
 
@@ -128,6 +137,8 @@ def _run(a, conn) -> int:
                                         fetched_at=fetched)
         conn.commit()
         print(json.dumps({"records": len(records), **stats}, ensure_ascii=False))
+    elif a.cmd == "fetch":
+        return _fetch(conn, a)
     elif a.cmd == "check":
         r = check(conn, address=a.address, trade=a.trade, name=a.name, license_no=a.license,
                   business_address=a.business_address)
@@ -143,3 +154,48 @@ def _run(a, conn) -> int:
                               "FROM scheme s LEFT JOIN roster_fetch r USING (scheme_id) ORDER BY s.trade"):
             print("\t".join(str(x or "—") for x in s))
     return 0
+
+
+def _fetch(conn, a) -> int:
+    from .ingest.download import download_scheme, downloadable_schemes, list_links
+
+    schemes = downloadable_schemes(conn) if a.all else [a.scheme]
+    failed = 0
+    for scheme_id in schemes:
+        if a.list:
+            links = list_links(conn, scheme_id)
+            print(f"{scheme_id}: {len(links)} 件")
+            for link in links:
+                print(f"  {link.text or '—'}\t{link.url}")
+            continue
+        try:
+            files = download_scheme(conn, scheme_id, a.dest)
+        except (OSError, ValueError) as e:
+            # --all では1つの失敗で止めず、残りを続ける
+            print(f"{scheme_id}: 失敗: {e}", file=sys.stderr)
+            failed += 1
+            if not a.all:
+                return 2
+            continue
+        fmt = conn.execute("SELECT publication_format FROM scheme WHERE scheme_id = ?", (scheme_id,)).fetchone()[0]
+        for f in files:
+            print(f"{scheme_id}: ダウンロードしました {f.path}（{f.url}）")
+            if not a.do_import:
+                continue
+            if fmt not in ("full_list_excel", "full_list_pdf"):
+                print(f"  告示などの差分は日付が必要なので、notice --scheme {scheme_id} --file {f.path} --date 告示日"
+                      " で取り込んでください")
+                continue
+            records = parse_file(f.path, load_for_scheme(conn, scheme_id))
+            if not records:
+                print(f"  名簿の行を1件も読み取れませんでした。取り込みは中止しました"
+                      f"（preview --scheme {scheme_id} --file {f.path} で確かめてください）", file=sys.stderr)
+                failed += 1
+                continue
+            doc_id, new = store_document(conn, scheme_id, f.path, kind="full_list", url=f.url, raw_dir=a.raw_dir)
+            if not new:
+                print("  前回と同じファイルなので取り込みは省略しました")
+                continue
+            stats = import_full_list(conn, scheme_id, records, doc_id=doc_id)
+            print("  " + json.dumps({"records": len(records), **stats}, ensure_ascii=False))
+    return 1 if failed else 0

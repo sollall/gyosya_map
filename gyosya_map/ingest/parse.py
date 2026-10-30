@@ -14,7 +14,7 @@ def detect_format(path: Path, config: ParserConfig, notice: bool) -> str:
     if config.format:
         return config.format
     ext = path.suffix.lower()
-    if ext in (".xlsx", ".xlsm"):
+    if ext in (".xlsx", ".xlsm", ".xls"):
         return "excel"
     if ext == ".csv":
         return "csv"

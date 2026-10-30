@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS scheme (
     terms_of_use       TEXT,                -- 公開資料の再利用条件
     required_sub_scope TEXT,                -- 範囲として必須の項目（例: 一時多量ごみ）
     parser_config      TEXT,                -- 名簿の読み込み設定（JSON。ingest/config.py）
+    download_config    TEXT,                -- 名簿ファイルの探し方（JSON。ingest/download.py）
     verified_at        TEXT
 );
 CREATE INDEX IF NOT EXISTS scheme_trade ON scheme(trade, authority_id);
