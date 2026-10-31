@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS scheme (
     license_name       TEXT NOT NULL,       -- 自治体ごとの正式名称
     validity_years     INTEGER,
     publication_format TEXT CHECK (publication_format IN
-                         ('full_list_pdf', 'full_list_excel', 'full_list_html',
+                         ('full_list_pdf', 'full_list_excel', 'full_list_csv', 'full_list_html',
                           'search_system', 'notice_diff', 'phone_only')),
                                             -- NULL = 未調査。full_list_html は全件名簿が
                                             -- 掲載ページのHTML表だけで、ファイルの配布が無いもの
@@ -52,8 +52,10 @@ CREATE TABLE IF NOT EXISTS source_document (
 CREATE TABLE IF NOT EXISTS licensee (
     licensee_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     scheme_id      TEXT NOT NULL REFERENCES scheme(scheme_id),
-    license_no     TEXT NOT NULL,           -- 原文のまま
-    license_no_key TEXT NOT NULL,           -- 照合用に正規化した番号
+    license_no     TEXT,                    -- 原文のまま。NULL = 原本に許可番号の欄が無い制度
+                                            -- （番号は採番しない。normalize.licensee_key のコメント）
+    license_no_key TEXT NOT NULL,           -- 業者1件を決めるキー（normalize.licensee_key）。
+                                            -- 番号があれば正規化した番号、無ければ商号＋所在地から作る
     name           TEXT NOT NULL,           -- 商号（原文）
     name_key       TEXT NOT NULL,           -- 正規化した名前
     address        TEXT,

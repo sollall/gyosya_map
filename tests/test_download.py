@@ -5,7 +5,8 @@ from conftest import TODAY
 from fixtures import make_xlsx
 
 from gyosya_map import db
-from gyosya_map.ingest.download import DownloadConfig, decode_html, download_scheme, find_links, list_links
+from gyosya_map.ingest.download import (DownloadConfig, decode_html, download_scheme, downloadable_schemes, find_links,
+                                        list_links)
 
 PAGE = "https://www.pref.example.jp/docs/kaitai/index.html"
 HTML = """<html><head><meta charset="Shift_JIS"></head><body>
@@ -80,6 +81,16 @@ def test_download_scheme_errors_and_direct_file(conn, tmp_path):
     assert f.calls == [pdf_url] and d.path.name == "7422.pdf"
     with pytest.raises(ValueError, match="source_url"):
         download_scheme(conn, "pref-14.unknown", tmp_path, fetcher=f)
+
+
+def test_downloadable_schemes_include_csv_but_not_html(conn):
+    """CSVが原本の制度は full_list_pdf と同じく --all の対象。HTML表だけの制度は取るファイルが無い。"""
+    conn.execute("UPDATE scheme SET publication_format = 'full_list_csv' WHERE scheme_id = 'muni-111007.sewer'")
+    schemes = downloadable_schemes(conn)
+    assert "muni-111007.sewer" in schemes
+    assert "tokyo-gesui.sewer" not in schemes            # full_list_html
+    assert "pref-13.electrical" not in schemes           # phone_only
+    assert "pref-13.construction" not in schemes         # search_system
 
 
 def test_xls_old_excel(tmp_path):

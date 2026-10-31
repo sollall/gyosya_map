@@ -50,7 +50,7 @@ def test_missing_files(tmp_path):
 def test_rejects_bad_rows(tmp_path):
     rows = [
         extract_row(),
-        extract_row(license_no=DROP),                        # 必須項目が無い
+        extract_row(license_no=DROP, address=DROP),          # 番号が無い行は所在地が必須
         extract_row(license_no="第3号", name=None),           # 必須項目が null
         extract_row(license_no="第4号", address=""),          # 空文字は null にする
         extract_row(license_no="第5号", valid_until="令和13年3月31日"),   # 和暦は抽出側で変換する
@@ -63,7 +63,7 @@ def test_rejects_bad_rows(tmp_path):
     ]
     problems = _problems(make_extract(tmp_path, rows))
     assert len(problems) == 10, problems
-    assert "rows.jsonl:2: license_no がありません（必須）" in problems
+    assert any("rows.jsonl:2: license_no が無い行は address が必須です" in p for p in problems)
     assert any(p.startswith("rows.jsonl:3: name が null") for p in problems)
     assert any(p.startswith("rows.jsonl:4: address が空文字") for p in problems)
     assert any("rows.jsonl:5: valid_until は 2026-11-05 の形" in p for p in problems)
@@ -228,10 +228,10 @@ def test_cli_import_extract(tmp_path, capsys):
     assert json.loads(out.split(": ", 1)[1])["inserted"] == 1
     assert "未検品 なので、この 1 件は地図に出ません" in err
     # 不正なデータは取り込まずに、どの行の何が不正かを出して落ちる
-    bad = make_extract(tmp_path / "data_extracts", [extract_row(license_no=DROP)], date="2026-11-06")
+    bad = make_extract(tmp_path / "data_extracts", [extract_row(name=DROP)], date="2026-11-06")
     assert main(["--db", dbp, "import-extract", "--dir", str(bad)]) == 2
     err = capsys.readouterr().err
-    assert "rows.jsonl:1: license_no がありません" in err and "doc/extract-format.md" in err
+    assert "rows.jsonl:1: name がありません" in err and "doc/extract-format.md" in err
     assert db.connect(dbp).execute("SELECT count(*) FROM licensee").fetchone()[0] == 1
     # --scheme が manifest と違うときも取り込まない
     assert main(["--db", dbp, "import-extract", "--scheme", "pref-14.septic-construction", "--dir", str(d)]) == 2
@@ -348,6 +348,94 @@ def test_cli_map_reports_left_out_rows(tmp_path, capsys):
     assert main(["--db", dbp, "map", "--include-unreviewed", "--out", str(tmp_path / "m2.html")]) == 0
     out = capsys.readouterr().out
     assert "有効な登録業者 1 件" in out and "検品前の行 1 件を含めました" in out
+
+
+WATER = "tokyo-suido.water"            # 原本に指定番号の列が無い名簿（東京都指定給水装置工事事業者）
+BUNKYO = "東京都文京区本郷1-1-1"
+HACHIOJI = "東京都八王子市元本郷町3-24-1"
+
+
+def _no_number_rows() -> list[dict]:
+    """許可番号の記載が無い名簿の最小の抽出データ（3行）。同じ商号で所在地が違う行を含む。"""
+    return [extract_row(license_no=None, name="株式会社サンプル管工", address=BUNKYO),
+            extract_row(license_no=None, name="有限会社見本設備", address=HACHIOJI),
+            extract_row(license_no=None, name="株式会社サンプル管工", address="東京都八王子市元本郷町3-24-2")]
+
+
+def test_rows_without_a_license_no_are_accepted_and_keyed_by_name_and_address(conn, tmp_path):
+    """原本に許可番号の欄が無い制度では license_no を null にできる（番号は採番しない）。"""
+    d = make_extract(tmp_path, _no_number_rows(), scheme_id=WATER, review=passed_review(sampled_rows=[1, 2, 3]))
+    ex = extracts.load(d)
+    assert [r["license_no"] for r in ex.rows] == [None, None, None]
+    assert extracts.import_extract(conn, ex, today=TODAY)["inserted"] == 3
+    saved = conn.execute("SELECT license_no, license_no_key, name FROM licensee ORDER BY license_no_key").fetchall()
+    assert [r["license_no"] for r in saved] == [None, None, None]   # 番号は作らない。欠けは欠けたまま
+    # 商号＋所在地で1件に決まる（同じ商号でも所在地が違えば別の業者）
+    assert all(r["license_no_key"].startswith("番号の記載なし ") for r in saved)
+    assert len({r["license_no_key"] for r in saved}) == 3
+    # 同じ抽出データをもう一度取り込んでも増えない（キーが決定的）
+    assert extracts.import_extract(conn, extracts.load(d), today=TODAY) \
+        == {"scheme": WATER, "kind": "full_list", "rows": 3, "reviewed": True, "new_document": False,
+            "inserted": 0, "updated": 3, "removed": 0}
+
+
+def test_check_finds_a_row_without_a_license_no_by_name(conn, tmp_path):
+    """商号＋所在地で引ける。判定は有効として扱い、番号が無いことを結果に出す。"""
+    from gyosya_map.matcher import AUTHORIZED, check
+
+    extracts.import_extract(conn, extracts.load(make_extract(
+        tmp_path, _no_number_rows(), scheme_id=WATER, review=passed_review(sampled_rows=[1, 2, 3]))), today=TODAY)
+    r = check(conn, address=BUNKYO, trade="water", name="サンプル管工（株）", business_address=BUNKYO, today=TODAY)
+    assert r.verdict == AUTHORIZED and len(r.evidence) == 1
+    assert r.evidence[0].license_no is None and r.evidence[0].address == BUNKYO
+    # --json でも番号が欠けていることが分かる
+    assert r.to_dict()["evidence"][0]["license_no_note"] == "この名簿に許可番号の記載はありません"
+    rendered = r.render()
+    assert "この名簿に許可番号の記載はありません" in rendered
+    assert "第号" not in rendered and "None" not in rendered
+
+
+def test_a_license_no_never_hits_a_row_that_has_none(conn, tmp_path):
+    """許可番号で引いたときに license_no IS NULL の行へ当たらないこと。"""
+    from gyosya_map.matcher import NOT_FOUND, check
+
+    extracts.import_extract(conn, extracts.load(make_extract(
+        tmp_path, _no_number_rows(), scheme_id=WATER, review=passed_review(sampled_rows=[1, 2, 3]))), today=TODAY)
+    key = conn.execute("SELECT license_no_key FROM licensee LIMIT 1").fetchone()[0]
+    for no in ("1", "第1号", "番号の記載なし", key):
+        r = check(conn, address=BUNKYO, trade="water", license_no=no, today=TODAY)
+        assert (r.verdict, r.evidence) == (NOT_FOUND, []), no
+
+
+def test_rejects_rows_that_cannot_be_told_apart_without_a_license_no(tmp_path):
+    rows = [extract_row(license_no=None, name="株式会社サンプル管工", address=BUNKYO),
+            # 商号も所在地も同じ（番号が無いので見分けられない）
+            extract_row(license_no=None, name="（株）サンプル　管工", address="東京都文京区本郷１－１－１"),
+            extract_row(license_no=None, name="有限会社見本設備", address=DROP)]
+    problems = _problems(make_extract(tmp_path, rows, scheme_id=WATER))
+    assert any("rows.jsonl:2: 商号＋所在地 が 1 行目と同じ業者になります" in p for p in problems)
+    assert any("rows.jsonl:3: license_no が無い行は address が必須です" in p for p in problems)
+
+
+def test_notice_rows_still_need_a_license_no(tmp_path):
+    """告示は差分を番号で積むので、license_no を null にはできない。"""
+    d = make_extract(tmp_path, [extract_row(license_no=None, status=DROP, event="new")],
+                     scheme_id=WATER, kind="notice", published_on="2026-10-01")
+    assert any("rows.jsonl:1: license_no が null です" in p for p in _problems(d))
+
+
+def test_map_popup_says_when_the_roster_has_no_license_numbers(conn, tmp_path):
+    from fixtures import make_towns
+
+    from gyosya_map import geo, mapview
+
+    geo.load_towns(conn, make_towns(tmp_path / "latest.csv", [("13105", "文京区", "本郷", "", 35.70, 139.75)]))
+    extracts.import_extract(conn, extracts.load(make_extract(
+        tmp_path, _no_number_rows(), scheme_id=WATER, review=passed_review(sampled_rows=[1, 2, 3]))), today=TODAY)
+    points, _ = mapview.collect(conn, today=TODAY)
+    assert [(p["name"], p["license_no"]) for p in points] == [("株式会社サンプル管工", None)]
+    html = mapview.write_map(points, mapview.MapStats(plotted=1), tmp_path / "m.html", today=TODAY).read_text("utf-8")
+    assert '"license_no": null' in html and "この名簿に許可番号の記載はありません" in html
 
 
 def test_check_says_when_a_row_is_unreviewed(conn, tmp_path):

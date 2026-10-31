@@ -19,6 +19,8 @@ ALIASES: dict[str, tuple[str, ...]] = {
     "event": ("区分", "種別", "異動内容"),
 }
 
+# 既存のパーサー（Excel・CSV・PDF）は番号の列がある名簿だけを読む。原本に許可番号の欄が無い制度は
+# 抽出データ（extracts.py）で取り込む。番号の列を読み落とした表をここで黙って通さないため必須のまま。
 _REQUIRED = ("license_no", "name")
 
 

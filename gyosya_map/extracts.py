@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .ingest.roster import apply_notice_events, import_full_list, register_document
-from .normalize import normalize_license_no
+from .normalize import licensee_key
 
 ROWS_FILE = "rows.jsonl"
 MANIFEST_FILE = "manifest.json"
@@ -30,7 +30,10 @@ REVIEW_RESULTS = ("passed", "failed")
 # rows.jsonl の項目（licensee テーブルに対応する）。これ以外のキーがあればエラーにする。
 ROW_TEXT_FIELDS = ("license_no", "name", "address", "representative", "sub_scope")
 ROW_DATE_FIELDS = ("valid_from", "valid_until")
-ROW_REQUIRED_FIELDS = ("license_no", "name")
+# license_no は、原本に許可番号の欄が無い制度では null にできる（番号は採番しない）。
+# そのときは商号＋所在地で業者を決めるので address も必須になる（_check_row）。
+# 告示（notice）は差分を番号で積むので license_no が必須。
+ROW_REQUIRED_FIELDS = ("name",)
 # 照合キーと検品状態はインポータが決定的に作る。抽出側に書かせない。
 ROW_GENERATED_FIELDS = ("license_no_key", "name_key", "needs_review", "licensee_id", "source_doc", "fetched_at")
 
@@ -214,17 +217,39 @@ def _check_row(problems: list[str], where: str, row: dict, kind: str) -> None:
         problems.append(f"{where}: 知らない項目があります: {', '.join(unknown)}"
                         f"（{kind} で使えるのは {', '.join(sorted(allowed))}）")
     for name in ROW_TEXT_FIELDS:
-        _check_text(problems, where, row, name, required=name in ROW_REQUIRED_FIELDS)
+        required = name in ROW_REQUIRED_FIELDS or (name == "license_no" and kind == "notice")
+        _check_text(problems, where, row, name, required=required)
     for name in ROW_DATE_FIELDS:
         _check_date(problems, where, row, name)
     if kind == "full_list":
         _check_choice(problems, where, row, "status", STATUSES)
+        if not row.get("license_no") and not row.get("address"):
+            # 番号が無い行は商号＋所在地で業者を決めるので、所在地まで無いと別の業者と区別できない
+            problems.append(f"{where}: license_no が無い行は address が必須です"
+                            "（商号＋所在地で業者を見分けるため）。原本に許可番号の欄が無い制度でも、"
+                            "所在地が読めないなら収集担当が原本の見方を直してから出し直してください")
     else:
         _check_choice(problems, where, row, "event", EVENTS, required=True)
     vf, vu = _date(row.get("valid_from") or ""), _date(row.get("valid_until") or "")
     if vf and vu and vu < vf:
         problems.append(f"{where}: valid_until（{row['valid_until']}）が valid_from（{row['valid_from']}）"
                         "より前になっています")
+
+
+def _match_key(row: dict) -> str | None:
+    """行の重複を見つけるキー（licensee.license_no_key と同じ作り方）。作れなければ None。
+
+    値そのものの不正（name の欠け、番号が空文字など）は _check_row が別に報告するので、
+    ここでは黙って諦める。
+    """
+    no, name, address = row.get("license_no"), row.get("name"), row.get("address")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    if no is not None and not (isinstance(no, str) and no.strip()):
+        return None
+    if address is not None and not isinstance(address, str):
+        return None
+    return licensee_key(no, name, address)
 
 
 def _read_rows(problems: list[str], path: Path, kind: str) -> list[dict]:
@@ -244,14 +269,15 @@ def _read_rows(problems: list[str], path: Path, kind: str) -> list[dict]:
             continue
         _check_row(problems, where, row, kind)
         rows.append(row)
-        no = row.get("license_no")
-        if isinstance(no, str) and no.strip():
-            key = normalize_license_no(no)
-            if key in first_line:
-                problems.append(f"{where}: license_no が {first_line[key]} 行目と同じ業者になります"
-                                f"（照合キー {key}）。どちらが正しいか収集担当で決めてください")
-            else:
-                first_line[key] = lineno
+        key = _match_key(row)
+        if key is None:
+            continue
+        if key in first_line:
+            what = "license_no" if row.get("license_no") else "商号＋所在地"
+            problems.append(f"{where}: {what} が {first_line[key]} 行目と同じ業者になります"
+                            f"（照合キー {key}）。どちらが正しいか収集担当で決めてください")
+        else:
+            first_line[key] = lineno
     return rows
 
 

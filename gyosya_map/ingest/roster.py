@@ -8,7 +8,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from ..normalize import normalize_license_no, normalize_name, parse_date
+from ..normalize import licensee_key, normalize_license_no, normalize_name, parse_date
 
 
 def _today() -> dt.date:
@@ -100,7 +100,7 @@ def import_full_list(conn: sqlite3.Connection, scheme_id: str, records: list[dic
     stats = {"inserted": 0, "updated": 0, "removed": 0}
     with conn:
         for rec in records:
-            key = normalize_license_no(rec["license_no"])
+            key = licensee_key(rec.get("license_no"), rec["name"], rec.get("address"))
             if key in seen:
                 continue
             seen.add(key)
@@ -119,7 +119,7 @@ def import_full_list(conn: sqlite3.Connection, scheme_id: str, records: list[dic
                        sub_scope = excluded.sub_scope, source_doc = excluded.source_doc,
                        fetched_at = excluded.fetched_at, status = excluded.status,
                        needs_review = excluded.needs_review""",
-                (scheme_id, rec["license_no"], key, rec["name"], normalize_name(rec["name"]), rec.get("address"),
+                (scheme_id, rec.get("license_no"), key, rec["name"], normalize_name(rec["name"]), rec.get("address"),
                  rec.get("representative"), _iso(vf), _iso(vu), rec.get("sub_scope"), doc_id,
                  fetched_at.isoformat(), _status(vu, today, rec.get("status")),
                  int(bool(rec.get("needs_review")))))
@@ -138,7 +138,11 @@ def import_full_list(conn: sqlite3.Connection, scheme_id: str, records: list[dic
 def apply_notice_events(conn: sqlite3.Connection, scheme_id: str, events: list[dict], *, doc_id: int,
                         notice_date: dt.date, fetched_at: dt.date | None = None,
                         today: dt.date | None = None) -> dict:
-    """告示の差分（新規・更新・変更・廃止）を積み上げる。告示は古い順に適用すること。"""
+    """告示の差分（新規・更新・変更・廃止）を積み上げる。告示は古い順に適用すること。
+
+    差分を同じ業者に積むには番号で追う必要があるので、告示の行は license_no が必須
+    （商号＋所在地のキーは、商号変更・移転の告示で別の業者になってしまう）。
+    """
     fetched_at = fetched_at or _today()
     today = today or _today()
     years = _validity_years(conn, scheme_id)

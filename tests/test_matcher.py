@@ -122,6 +122,23 @@ def test_waste_sub_scope(conn):
     assert r.verdict == NOT_FOUND and "一時多量ごみ" in r.message
 
 
+def test_html_and_csv_full_lists_count_as_complete_rosters(conn):
+    """全件名簿が掲載ページのHTML表だけ（full_list_html）・CSV（full_list_csv）の制度も、
+    取り込めば full_list_pdf と同じ完全な名簿として扱う。"""
+    # tokyo-gesui.sewer は seed で full_list_html。さいたま市の排水設備はCSVが原本の制度に見立てる
+    conn.execute("UPDATE scheme SET publication_format = 'full_list_csv' WHERE scheme_id = 'muni-111007.sewer'")
+    for scheme_id, address in (("tokyo-gesui.sewer", "東京都文京区本郷1-1-1"),
+                               ("muni-111007.sewer", "さいたま市浦和区常盤6-4-4")):
+        # 名簿を取り込む前は、載っていなくても「公認なし」とは言えない
+        r = check(conn, address=address, trade="sewer", name="載っていない業者", today=TODAY)
+        assert (r.verdict, [s.completeness for s in r.schemes]) == (UNDETERMINED, ["none"]), scheme_id
+        assert "名簿が未取得" in r.message, scheme_id
+        _full(conn, scheme_id, [{"license_no": "1", "name": "見本設備"}])
+        r = check(conn, address=address, trade="sewer", name="載っていない業者", today=TODAY)
+        assert (r.verdict, [s.completeness for s in r.schemes]) == (NOT_FOUND, ["high"]), scheme_id
+        assert check(conn, address=address, trade="sewer", license_no="1", today=TODAY).verdict == AUTHORIZED
+
+
 def test_sewer_out_of_area(conn):
     conn.execute("INSERT INTO jurisdiction_override VALUES ('141330', '小杉町', 'sewer', NULL, '公共下水道の区域外')")
     r = check(conn, address=KAWASAKI, trade="sewer", name="x", today=TODAY)

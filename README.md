@@ -19,7 +19,12 @@ uv run gyosya-map init
 ```
 
 版を上げたあとも `uv run gyosya-map init` を実行すれば、古いDBに足りない列を追加する。
-列の追加で直せない変更のときは `uv run gyosya-map init --reset` で作り直す（取り込んだ名簿は消えるが、原本は data/raw/ に残る）。
+列の追加で直せない変更のときは `uv run gyosya-map init --reset` で作り直す（取り込んだ名簿は消えるが、
+原本は data/raw/ に残り、`data_extracts/` の抽出データからは `import-extract --all` で入れ直せる）。
+
+**CMPA-14 より前のDBは `init --reset` が必要。** `licensee.license_no` を NULL 可にし（原本に許可番号の
+欄が無い制度のため）、`scheme.publication_format` に `full_list_csv` を足したので、どちらも
+`ALTER TABLE` では直せない。
 
 川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`uv run gyosya-map schemes` で一覧）。
 
@@ -39,6 +44,13 @@ uv run gyosya-map import-extract --all
 
 コミット済みの抽出データと決定的なコードだけで、クリーンな環境から同じDBと同じ地図HTMLが再生成できる状態を保つ。
 検品（`manifest.json` の `review.result` が `passed`）が済んでいない行は、`needs_review = 1` になり地図に出ない。
+
+**原本に許可番号の欄が無い名簿では `license_no` を `null` にする（番号は採番しない）。**
+東京都指定給水装置工事事業者やさいたま市一般廃棄物（ごみ）収集運搬業許可のように、原本に番号の列が
+無い名簿がある。許可の有無を確かめる道具で番号を作ると、存在しない番号が本物として扱われるので、
+欠けているものは欠けているままにする。その行は商号＋所在地で照合し（`address` が必須になる）、
+照合結果と地図のポップアップに「この名簿に許可番号の記載はありません」と出す。判定そのものは
+番号がある行と同じに扱い、`check --license <番号>` でこの行に当たることはない。
 
 ### 名簿のダウンロード
 
@@ -203,6 +215,14 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 ```
 
 - `municipalities` のキーは都道府県内の名前か団体コード。政令市に書いた例外は行政区にも効く。
+- `publication_format`（名簿の公開のされ方。未調査なら書かない）:
+  - `full_list_excel` / `full_list_pdf` / `full_list_csv` — 全件名簿がファイルで配布されている。
+    取り込めば「名簿に無い＝確認できず」と言えるようになる（完全性 high）。`fetch --all` の対象。
+  - `full_list_html` — 全件名簿が掲載ページのHTML表だけで、ファイルの配布が無い（例: 東京都指定排水設備
+    工事事業者）。扱いは上の3つと同じだが、取るファイルが無いので `fetch --all` の対象にはしない。
+  - `search_system` — 1件ずつ問い合わせる検索システム（`check --search`）。
+  - `notice_diff` — 告示（差分）だけが公開されている。名簿は不完全なまま（完全性 low）。
+  - `phone_only` — 名簿が公開されていない。地図に出せない。
 - `parser` は名簿の読み込み設定（見出しの行・列名・シート・告示の見出し語など。`ingest/config.py`）。
   きれいな表ならコードを変えずにここで吸収できる。書く前に
   `uv run gyosya-map preview --scheme ID --file 名簿.xlsx --parser-config '{"header_row": 3}'` で読み取りを確かめる。

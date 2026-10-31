@@ -24,7 +24,10 @@ NO_SCHEME = "制度なし"
 
 # 全件名簿が公開されている公開形式（取り込めば完全性が high になる）。
 # full_list_html は掲載ページのHTML表だけでファイルの配布が無いもの。
-FULL_LIST_FORMATS = ("full_list_excel", "full_list_pdf", "full_list_html")
+FULL_LIST_FORMATS = ("full_list_excel", "full_list_pdf", "full_list_csv", "full_list_html")
+
+# 原本に許可番号の欄が無い制度の行に出す説明（番号は採番しない）
+NO_LICENSE_NO_NOTE = "この名簿に許可番号の記載はありません"
 
 
 class SearchSystemClient(Protocol):
@@ -43,7 +46,7 @@ class SearchSystemClient(Protocol):
 class Evidence:
     authority: str
     license_name: str
-    license_no: str
+    license_no: str | None        # None = 原本に許可番号の欄が無い名簿
     name: str
     address: str | None
     valid_until: str | None
@@ -52,6 +55,8 @@ class Evidence:
     source_url: str | None
     fetched_at: str | None
     needs_review: bool = False
+    # 原本に許可番号の欄が無い名簿の説明（番号がある行は None）。--json でも欠けが分かるように持つ
+    license_no_note: str | None = None
 
 
 @dataclass
@@ -86,8 +91,12 @@ class Result:
         for e in self.evidence:
             until = f" 有効期限: {e.valid_until}" if e.valid_until else ""
             scope = f" 範囲: {e.sub_scope}" if e.sub_scope else ""
-            lines.append(f"  根拠: {e.authority} {e.license_name} {_license_label(e.license_no)} {e.name}"
+            label = f"{_license_label(e.license_no)} " if e.license_no else ""
+            lines.append(f"  根拠: {e.authority} {e.license_name} {label}{e.name}"
                          f"（{e.status}{'・未検品' if e.needs_review else ''}）{until}{scope}")
+            if e.license_no_note:
+                # 番号が無いこと自体を見せる。判定は有効として扱う（欠けを捏造で埋めない）
+                lines.append(f"        {e.license_no_note}")
             lines.append(f"        出典: {e.source_url or '—'}（取得日: {e.fetched_at or '—'}）")
         for n in self.notes:
             mark = "重要" if n["severity"] == "important" else "参考"
@@ -130,7 +139,9 @@ def _find(conn, scheme_ids: list[str], license_no: str | None, name: str | None,
                WHERE l.scheme_id IN ({ph}) AND l.status != 'unknown'"""
     rows: list[sqlite3.Row] = []
     if license_no:
-        rows = conn.execute(base + " AND l.license_no_key = ?",
+        # license_no が NULL の行の license_no_key は商号＋所在地から作っていて、番号の照合キーとは
+        # 形が違うので一致しない（normalize.licensee_key）。番号で引いて当たらないことを明示しておく。
+        rows = conn.execute(base + " AND l.license_no IS NOT NULL AND l.license_no_key = ?",
                             (*scheme_ids, normalize_license_no(license_no))).fetchall()
     if not rows and name:
         rows = conn.execute(base + " AND l.name_key = ?", (*scheme_ids, normalize_name(name))).fetchall()
@@ -160,7 +171,8 @@ def _evidence(row) -> Evidence:
                     license_no=row["license_no"], name=row["name"], address=row["address"],
                     valid_until=row["valid_until"], status=row["status"], sub_scope=row["sub_scope"],
                     source_url=row["source_url"], fetched_at=row["fetched_at"],
-                    needs_review=bool(row["needs_review"]))
+                    needs_review=bool(row["needs_review"]),
+                    license_no_note=None if row["license_no"] else NO_LICENSE_NO_NOTE)
 
 
 def _wareki(iso: str | None) -> str | None:

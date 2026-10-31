@@ -61,7 +61,8 @@ def collect(conn: sqlite3.Connection, *, schemes: list[str] | None = None, trade
                    s.license_name, s.trade, a.name AS authority, COALESCE(d.url, s.source_url) AS source_url
             FROM licensee l JOIN scheme s USING (scheme_id) JOIN authority a USING (authority_id)
             LEFT JOIN source_document d ON d.doc_id = l.source_doc
-            WHERE {' AND '.join(where)} ORDER BY s.trade, l.scheme_id, l.license_no""", args).fetchall()
+            WHERE {' AND '.join(where)}
+            ORDER BY s.trade, l.scheme_id, l.license_no, l.license_no_key""", args).fetchall()
     stats = MapStats(include_unreviewed=include_unreviewed)
     cache: dict[str, object] = {}
     points = []
@@ -160,7 +161,7 @@ for (const p of POINTS) {
   m.bindPopup(`<dl class="popup">
     <dt>${esc(p.authority)} ${esc(p.license_name)}</dt><dd><b>${esc(p.name)}</b>${
       p.needs_review ? ' <span class="unreviewed">未検品</span>' : ""}</dd>
-    <dt>番号</dt><dd>${esc(p.license_no)}</dd>
+    <dt>番号</dt><dd>${p.license_no ? esc(p.license_no) : "この名簿に許可番号の記載はありません"}</dd>
     <dt>有効期限</dt><dd>${esc(p.valid_until ?? "名簿に記載なし")}</dd>
     <dt>所在地</dt><dd>${esc(p.address)}<br><small>位置は${esc(PRECISION[p.precision])}</small></dd>
     <dt>出典</dt><dd>${p.source_url ? `<a href="${esc(p.source_url)}" target="_blank" rel="noopener">名簿</a>` : "—"}

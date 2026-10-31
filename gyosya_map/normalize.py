@@ -54,6 +54,23 @@ def normalize_license_no(no: str) -> str:
     return s.lower()
 
 
+# 原本に許可番号の欄が無い名簿の行に使う、licensee.license_no_key の印。
+# 空白を含むので normalize_license_no() の返す値（空白を必ず落とす）と一致することはない。
+# つまり、許可番号で照合したときに「番号の記載が無い行」へ当たることはない。
+NO_LICENSE_NO = "番号の記載なし "
+
+
+def licensee_key(license_no: str | None, name: str, address: str | None) -> str:
+    """制度の中で業者1件を決めるキー（licensee.license_no_key）を決定的に作る。
+
+    原本に許可番号の欄が無い制度（例: さいたま市一般廃棄物（ごみ）収集運搬業許可）では
+    **番号を採番しない**。欠けているものは欠けているままにし、商号＋所在地でキーを作る。
+    """
+    if license_no and license_no.strip():
+        return normalize_license_no(license_no)
+    return f"{NO_LICENSE_NO}{normalize_name(name)}/{normalize_address(address or '')}"
+
+
 _KANJI_DIGITS = {"〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
                  "六": 6, "七": 7, "八": 8, "九": 9}
 

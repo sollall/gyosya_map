@@ -301,7 +301,7 @@ def _fetch(conn, a) -> int:
             if not a.do_import:
                 continue
             notice = fmt == "notice_diff"
-            if not notice and fmt not in ("full_list_excel", "full_list_pdf"):
+            if not notice and fmt not in ("full_list_excel", "full_list_pdf", "full_list_csv"):
                 print(f"  公開形式（{fmt or '未調査'}）が全件名簿・告示ではないので、取り込みは省略しました")
                 continue
             records = parse_file(f.path, load_for_scheme(conn, scheme_id), notice=notice)

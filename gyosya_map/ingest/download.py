@@ -174,7 +174,11 @@ def download_scheme(conn: sqlite3.Connection, scheme_id: str, dest_dir: str | Pa
 
 
 def downloadable_schemes(conn: sqlite3.Connection) -> list[str]:
-    """全件名簿型・告示型で、掲載ページが分かっている制度（--all の対象）。"""
+    """全件名簿型・告示型で、掲載ページが分かっている制度（--all の対象）。
+
+    full_list_html はダウンロードできるファイルが無い（掲載ページのHTML表だけ）ので入れない。
+    """
     return [r[0] for r in conn.execute(
-        "SELECT scheme_id FROM scheme WHERE publication_format IN ('full_list_excel', 'full_list_pdf', 'notice_diff') "
+        "SELECT scheme_id FROM scheme WHERE publication_format IN "
+        "('full_list_excel', 'full_list_pdf', 'full_list_csv', 'notice_diff') "
         "AND (source_url IS NOT NULL OR download_config IS NOT NULL) ORDER BY scheme_id")]
