@@ -1,0 +1,337 @@
+{
+ "_comment": "東京都（都道府県レベルのみ）。担当機関は jurisdiction.py の既定ルールで決まり、ここには既定と違うものだけを書く。東京都には政令市がなく、23特別区と多摩の市町村がそれぞれ廃棄物・浄化槽清掃・多摩の下水道の権限を持つ。区市町村レベルの制度はこのファイルには入れていない（後続タスク）。区市町村について分かったことは _research_notes に書いた（load_seed_data は _ で始まるキーを読まない）。",
+ "prefecture": "13",
+ "_research_notes": [
+  "【waste（一般廃棄物収集運搬業）に都道府県レベルの制度は無い】東京都は一般廃棄物の処理主体ではないため、一般廃棄物収集運搬業の許可は 23特別区（清掃事業は平成12年に区へ移管）と多摩・島しょの各市町村が出す。よって pref-13 の waste 制度は作っていない。既定ルール（waste → muni）のままで正しい。区の名簿は各区が個別にPDFで公開している例を確認した（港区 https://www.city.minato.tokyo.jp/gomigenryou/kurashi/gomi/jigyosho/shushu/gyosha.html 、大田区 https://www.city.ota.tokyo.jp/seikatsu/gomi/gomi/kyokagyosha.files/haiki_ota_2604.pdf 「一般廃棄物収集運搬許可業者一覧（令和８年４月現在）」）。区市町村ごとに掲載ページ・形式・列構成が違うので、後続タスクで区市町村ごとに分割するのが妥当。",
+  "【産業廃棄物は都だが、業種 waste（不用品回収・遺品整理）には使えない】東京都の産業廃棄物処理業許可は「東京都産業廃棄物処理業者検索システム」（https://www.kankyo-sanpai.metro.tokyo.lg.jp/sanpaisearch/search_input.aspx 、入口ページ https://www.kankyo.metro.tokyo.lg.jp/resource/industrial_waste/processor/search ）で1件ずつ照会できる。全件のExcel/CSV/PDFは見当たらなかった。ただし家庭から出る不用品・遺品は一般廃棄物であり、産廃許可では受けられない。trade=waste の制度としてこれを入れると「産廃許可業者が家庭の不用品回収を受けられる」と誤って判定されるので、意図的に入れていない。",
+  "【septic の階層】浄化槽保守点検業者の登録は、23区・八王子市・町田市は各区市、それ以外の多摩地域と島しょ地域は東京都（pref-13.septic-maintenance）。保健所設置市かどうかで分かれる既定ルール（septic → [muni, 保健所設置市なら muni / それ以外は pref, pref]）と実態が一致しているので、municipalities の例外は書いていない（八王子市・町田市は seed/health_center_cities.csv に入っている。特別区は kind=special_ward から自動で保健所設置市になる）。浄化槽清掃業の許可は市町村。浄化槽工事業（登録・届出）は都（都市整備局）で全域。",
+  "【区市町村レベルで名簿がありそうな場所】(1) 一般廃棄物収集運搬業＝各区・各市町村のごみ担当課のページ。(2) 多摩地域の排水設備指定工事店＝各市町村の下水道課（例 調布市「調布市指定下水道工事店一覧表」https://www.city.chofu.lg.jp/070040/p042029.html ）。東京都下水道局の一覧ページにも「※多摩地域にお住まいの方は各市町村の指定事業者は市町村にお問い合わせください。」と明記されている。(3) 浄化槽保守点検業者（23区・八王子市・町田市）＝各区市。都が窓口一覧のPDFを出している（https://www.kankyo.metro.tokyo.lg.jp/documents/d/kankyo/2026-06-19-101653-616 ）。(4) 水道は武蔵野市・昭島市・羽村市・檜原村と島しょ町村が独自経営なので、指定給水装置工事事業者の名簿も各団体が持つ。",
+  "【市区町村マスターの欠け】seed/municipalities.csv の東京都は61件だが、東京都の市区町村は62（23区＋26市＋5町＋8村）。利島村（13362）が入っていない。このタスクでは直していない。",
+  "【島しょの公共下水道】既定ルールでは sewer → muni、public_sewer は既定値1。島しょ町村に公共下水道があるかは確認できていないので、municipalities の public_sewer はいじっていない。",
+  "【東京都の新CMSのファイルURLは拡張子が無い】水道・浄化槽・解体・建設業の名簿はすべて https://.../documents/d/<局>/<ID> という拡張子の無いURLで配られる。ingest/download.py の is_file_url() はパスの拡張子で判定するので、`gyosya-map fetch` は東京都の名簿リンクを1件も見つけられない。各制度の download には手がかりを書いてあるが、現状の fetch では効かない。原本は手で取るか、is_file_url を Content-Type でも判定するよう直す必要がある（このタスクでは直していない）。",
+  "【東京都オープンデータカタログには対象名簿が無い】catalog.data.metro.tokyo.lg.jp の CKAN API で都市整備局(t000008)・環境局(t000009)・水道局(t000019)・下水道局(t000020)の全データセット（計409件）の表題を見たが、指定給水装置工事事業者・指定排水設備工事事業者・解体工事業者登録・浄化槽の各名簿はどれも登録されていない（2026-10-31 確認）。同じ都市整備局が「屋外広告業登録業者の一覧」や「東京都鉄骨溶接部検査機関登録簿」は CC BY のオープンデータとして出しているので、載せる載せないは局内でも一律ではない。対象名簿は各局サイトポリシー（私的使用・引用以外の複製・転用は不可、二次利用は事前相談）の下にある。"
+ ],
+ "authorities": [
+  {
+   "authority_id": "tokyo-suido",
+   "name": "東京都水道局",
+   "level": "water_utility",
+   "parent_id": "pref-13"
+  },
+  {
+   "authority_id": "tokyo-gesui",
+   "name": "東京都下水道局",
+   "level": "water_utility",
+   "parent_id": "pref-13"
+  }
+ ],
+ "schemes": [
+  {
+   "scheme_id": "tokyo-suido.water",
+   "authority_id": "tokyo-suido",
+   "trade": "water",
+   "license_name": "東京都指定給水装置工事事業者",
+   "validity_years": 5,
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.waterworks.metro.tokyo.lg.jp/kurashi/shitei/ichiran",
+   "contact": "東京都水道局（〒163-8001 東京都新宿区西新宿2-8-1）",
+   "terms_of_use": "東京都水道局サイトポリシー（https://www.waterworks.metro.tokyo.lg.jp/policy）。「当サイトに掲載している個々の情報（文章、写真、イラストなど）は、著作権の対象となっています」とあり、引用する場合は「東京都水道局」と明記するよう求めている。私的使用のための複製・引用以外の複製・転用を認める記載はなく、オープンデータ（CC BY）指定も無い（東京都オープンデータカタログに本名簿のデータセットは無い。2026-10-31 確認）。抽出データをリポジトリに置いてよいかは要判断で、置く場合は出典「東京都水道局」を明記する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "全件名簿のPDFに指定番号の列が無い。列は 名称／所在地／電話番号／休業日・営業時間・修繕対応時間／漏水修繕の対応可否（埋設部）（屋内）／指定の有効期限 の7列で、許可番号に当たる項目が原本に存在しない。抽出データ形式では license_no が必須なので、このままでは取り込めない。毎月の「新規指定事業者一覧」「廃止指定事業者一覧」には指定番号があるが、全件名簿の行とは突き合わせられない。取り込み方はリーダーの判断が必要。"
+    },
+    {
+     "severity": "important",
+     "body": "東京都水道局の給水区域は23区と多摩26市町。多摩のうち武蔵野市・昭島市・羽村市・檜原村は市町村が独自に水道事業を経営しており都の区域外（https://www.waterworks.metro.tokyo.lg.jp/suidojigyo/gaiyou/tama ）。島しょは大島町・八丈町が町営上水道、他の8村が村営簡易水道。これらの団体の指定給水装置工事事業者は本制度には含まれない。"
+    },
+    {
+     "severity": "info",
+     "body": "名簿は2ファイルに分かれている。「東京23区」（2.41MB／168ページ）と「多摩地区・他府県など」（2.53MB／174ページ）。どちらも中身の基準日は令和８年９月３０日現在（PDF作成 2026-10-08）。両方を取らないと全件にならない。多摩地区のファイルには他道府県に所在する事業者（広島市・北九州市など）も入っている。"
+    },
+    {
+     "severity": "info",
+     "body": "件数は原本に書かれていない。有効期限の行数から数えた概数は 区部 約2,650件／多摩・他道府県 約2,724件（2026-10-31 時点の自前の数え方で、原本の公表値ではない）。抽出時に必ず数え直すこと。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意: 市区町村名は列ではなく「千代田区」「八王子市」のような中央寄せの見出し行で表され、所在地の列には市区町村名も入っている。「休業日、営業時間、修繕対応時間」「漏水修繕の対応可否」の欄には「非公表を希望」「更新手続前のため未確認」が入ることがある（この欄は指定の更新日時点の情報と注記されている）。所在地が2行に折り返される行がある。"
+    },
+    {
+     "severity": "info",
+     "body": "更新頻度の明記は無いが、毎月の指定分・届出分（告示）が同じページに並ぶので月次更新と見られる。2026-10-31 時点の最新は「新規指定事業者一覧（令和８年９月指定分）」「廃止指定事業者一覧（令和８年９月届出分）」。新規・廃止の一覧は 指定番号／商号／代表者／所在地（廃止は＋廃止日）の列で、全件名簿と違って指定番号がある。掲載ページに更新日の表示は無く、記事ID 081-001-20240819-006287 だけが出る。"
+    },
+    {
+     "severity": "info",
+     "body": "download の手がかりは書いてあるが、ファイルURLが https://www.waterworks.metro.tokyo.lg.jp/documents/d/waterworks/103013001-01-1 のように拡張子を持たないため、現状の `gyosya-map fetch` では見つけられない（ingest/download.py の is_file_url がパスの拡張子で判定する）。原本は手で取る。"
+    },
+    {
+     "severity": "info",
+     "body": "掲載ページには所管課名も電話番号も書かれておらず、局の代表は「東京都水道局：〒163-8001 東京都新宿区西新宿2-8-1」だけ。給水装置工事の問い合わせ窓口は区市町ごとのサービスステーション（一覧 https://www.waterworks.metro.tokyo.lg.jp/tetsuduki/madoguchi/kyusuikan 、例: 文京区 03-3816-1428、八王子市 042-655-3875）。指定・名簿そのものの所管課は確認できなかった。"
+    }
+   ],
+   "download": {
+    "href_pattern": "/documents/d/waterworks/103013001-01-",
+    "pick": "all"
+   }
+  },
+  {
+   "scheme_id": "tokyo-gesui.sewer",
+   "authority_id": "tokyo-gesui",
+   "trade": "sewer",
+   "license_name": "東京都指定排水設備工事事業者",
+   "publication_format": "full_list_html",
+   "source_url": "https://www.gesui.metro.tokyo.lg.jp/living/a4/list/current/",
+   "contact": "東京都下水道局 施設管理部 排水設備課 指定事業者担当（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二本庁舎、電話 03-5320-6582、受付 9時から12時まで及び13時から16時まで（土日祝を除く））",
+   "terms_of_use": "東京都下水道局サイトポリシー（https://www.gesui.metro.tokyo.lg.jp/sitepolicy/index.html）。「本サイトに掲載している個々の情報（文章、写真、イラストなど）は、著作権の対象となっています」「無断で複製・転用することはできません」とあり、二次利用は事前相談を求めている。robots.txt（https://www.gesui.metro.tokyo.lg.jp/robots.txt）に一覧ページを禁じる記載は無い（2026-10-31 確認）。抽出データをリポジトリに置いてよいかは要判断で、置く場合は出典「東京都下水道局」を明記する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "ファイルのダウンロードは無く、名簿は掲載ページ上のHTML表として区市町村ごとに分かれている（publication_format に full_list_html を足した）。索引ページから 23区 と 多摩地域30市町村 のページに分かれ、全件を揃えるには最大53ページを開く必要がある。URLは https://www.gesui.metro.tokyo.lg.jp/living/a4/list/current/<3桁>/ で、文京区=105、八王子市=201 を実際に開いて確認した（全国地方公共団体コードの下3桁と一致する並びに見えるが、53ページ全部は確認していない）。索引では檜原村と奥多摩町にリンクが無い。"
+    },
+    {
+     "severity": "important",
+     "body": "東京都（下水道局）が指定するのは区部の公共下水道。多摩地域の公共下水道は各市町村が管理し、排水設備の指定工事店も各市町村が指定する。索引ページに「※多摩地域にお住まいの方は各市町村の指定事業者は市町村にお問い合わせください。」と明記されている。そのため jurisdiction は23区だけを東京都下水道局に向け、多摩は既定ルール（市町村）のままにしている。"
+    },
+    {
+     "severity": "important",
+     "body": "区市町村ごとのページは「業者の所在地」で分けられている（事業者の営業区域ではない）。文京区のページは所在地が音羽・湯島・水道・千駄木など文京区内の町名だけ、八王子市のページは川口町・日吉町・楢原町など八王子市内の町名だけだった。つまり多摩のページに並ぶのも「多摩に所在する東京都指定の事業者」であって、全ページが同じ1つの名簿を分割したもの。全件を取るには多摩のページも読む必要がある。"
+    },
+    {
+     "severity": "info",
+     "body": "表の列は 事業者名／指定番号／所在地／電話番号／営業時間／休業日／業務内容(排水設備の新設)／なんでも相談所／感謝状贈呈／業務内容(既存設備の修理・維持管理) の10列。指定番号は「100-0115」のような形式。所在地の列には市区町村名が入っておらず（例「音羽二丁目６番１１号」）、ページの市区町村名を足さないと住所にならない。有効期限の列は無い。行数は文京区32件、八王子市60件（2026-10-31 時点）。"
+    },
+    {
+     "severity": "info",
+     "body": "基準日・更新日の表示がページに無く、全件の件数も公表されていない。別ページに「東京都指定排水設備工事事業者新規指定・変更等」（https://www.gesui.metro.tokyo.lg.jp/living/takuchi/list/shinkishitei_henkou 、更新日 2026-10-30）があり、年度ごとの新規指定・変更等のPDFが月次で並ぶ（直近3年度分だけ残る）。全件の再構成には使えないが、差分の確認に使える。"
+    },
+    {
+     "severity": "info",
+     "body": "指定の有効期間を確認できなかった（掲載ページ・一覧表のどちらにも記載が無い）。validity_years は空のままにしている。"
+    },
+    {
+     "severity": "info",
+     "body": "同じ内容が www.gesui1.metro.tokyo.lg.jp の同じパスでも返る。www.gesui.metro.tokyo.lg.jp を正とした。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-13.septic-maintenance",
+   "authority_id": "pref-13",
+   "trade": "septic",
+   "license_name": "東京都浄化槽保守点検業者登録",
+   "validity_years": 5,
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.kankyo.metro.tokyo.lg.jp/resource/general_waste/septic_tank/inspection",
+   "contact": "東京都環境局 資源循環推進部 一般廃棄物対策課 生活排水対策担当（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二庁舎19階、電話 03-5388-3583／営業区域に島しょ地域を含む業者）。営業区域が八王子市及び町田市を除く多摩地域のみの業者は 東京都多摩環境事務所 廃棄物対策課 浄化槽担当（〒190-0022 東京都立川市錦町4-6-3 東京都立川合同庁舎3階、電話 042-528-2692）",
+   "terms_of_use": "東京都環境局のページで公開。局のサイトポリシーは東京都共通の内容で、掲載情報は著作権の対象、私的使用のための複製・引用など著作権法上認められた場合を除き無断で複製・転用はできないという立場（東京都の著作権・リンクについて https://www.metro.tokyo.lg.jp/policy/chosakuken ）。オープンデータ（CC BY）指定は無い（東京都オープンデータカタログに本名簿のデータセットは無い。2026-10-31 確認）。抽出データをリポジトリに置いてよいかは要判断で、置く場合は出典「東京都環境局」を明記する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "都が登録するのは「八王子市及び町田市を除く多摩地域」と「島しょ地域」を営業区域とする業者だけ。23区内・八王子市内・町田市内を営業区域とする業者は各区・八王子市・町田市が登録し、この名簿には載らない（名簿の冒頭にそう明記されている）。窓口一覧のPDF: https://www.kankyo.metro.tokyo.lg.jp/documents/d/kankyo/2026-06-19-101653-616"
+    },
+    {
+     "severity": "important",
+     "body": "名簿に「営業区域」の列があり、「多摩地域（八王子市・町田市を除く）」「島しょ地域全域」「稲城市、調布市、狛江市、日野市、多摩市」のように業者ごとに違う。住所（本社所在地）は23区内でも営業区域は多摩というケースが多数あるので、住所で管轄を判定してはいけない。sub_scope として営業区域を残すべき。"
+    },
+    {
+     "severity": "info",
+     "body": "原本は「浄化槽保守点検業者登録名簿（令和８年６月１日現在）」（PDF 281KB、3ページ、99件）。登録番号は第1号から第540号まで飛び番で、欠番がある（99件で最大540号）。列は 登録（例「浄保(10)」＝更新回数）／No.（例「第1号」）／業者名／〒／住所／電話番号／営業区域。license_no は「浄保(10) 第1号」のように原文のまま持つのが無難。"
+    },
+    {
+     "severity": "info",
+     "body": "掲載ページの更新日は2026-06-19、PDFの作成は2026-06-02、元ファイル名は R080602.xlsx。更新頻度の明記は無い。リンクの文字は「こちら⇒（PDF：281KB）」で手がかりにならず、URL（/documents/d/kankyo/2026-06-19-101521-072）も更新のたびに変わると見られる。見出し「多摩地域（八王子市・町田市を除く）と島しょ地域の保守点検業者登録簿」の直後のリンクを探す。拡張子が無いURLなので現状の fetch では取れない。"
+    },
+    {
+     "severity": "info",
+     "body": "登録の有効期間は5年（東京都浄化槽の保守点検等に関する条例第3条第2項。手引き https://www.kankyo.metro.tokyo.lg.jp/resource/general_waste/septic_tank/registrars_guide ）。名簿に有効期限の列は無いので、valid_until は原本から埋められない。"
+    },
+    {
+     "severity": "info",
+     "body": "浄化槽の清掃業の許可は市町村（このタスクの対象外）。保守点検・清掃の制度案内は https://www.kankyo.metro.tokyo.lg.jp/resource/general_waste/septic_tank/company"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-13.septic-construction",
+   "authority_id": "pref-13",
+   "trade": "septic",
+   "license_name": "東京都浄化槽工事業者登録",
+   "validity_years": 5,
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.toshiseibi.metro.tokyo.lg.jp/kenchiku_kaihatsu/kenchiku_shidou/gyosya_shido/p_tank",
+   "contact": "東京都都市整備局 市街地建築部 建設業課（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二本庁舎3階南側、代表 03-5321-1111 内線 30-651・653）",
+   "terms_of_use": "東京都都市整備局サイトポリシー（https://www.toshiseibi.metro.tokyo.lg.jp/about.html）。「当サイトに掲載している個々の情報（文章、写真、イラストなど）の著作権は、原則として東京都都市整備局に帰属します」「無断で複製・転用することはできません」。この一覧には、建設業許可業者名簿のような二次配布禁止の個別注記は付いていない。オープンデータ（CC BY）指定は無い。抽出データをリポジトリに置いてよいかは要判断で、置く場合は出典「東京都都市整備局」を明記する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "公開されているのは「登録」浄化槽工事業者だけで、土木・建築・管工事の建設業許可を持つ「特例浄化槽工事業者（届出）」の一覧は公開されていない。実際に浄化槽工事をする業者の大半は届出側なので、この名簿の網羅性は低い（令和８年１月時点でわずか5件）。地図で「登録が見当たらない」を根拠に不可と判断してはいけない。"
+    },
+    {
+     "severity": "info",
+     "body": "原本は「浄化槽工事業者登録一覧」（PDF 97KB、1ページ、5件。令和８年１月時点、PDF作成 2026-02-13）。列は 登録番号／登録年月日／氏名又は名称／住所／代表者氏名／浄化槽設備士／浄化槽設備士免状の交付番号。有効期限の列は無いので、valid_until は登録年月日＋5年から出すことになる（原本に無い値なので推定扱い）。5件のうち3件は大島町所在、1件は神奈川県鎌倉市所在。"
+    },
+    {
+     "severity": "info",
+     "body": "登録は5年有効。手数料は新規33,000円・更新26,000円。建設業許可（土木・建築・管）がある場合は登録ではなく届出（特例浄化槽工事業者）で、手数料なし・許可の期間中有効。"
+    },
+    {
+     "severity": "info",
+     "body": "ファイルURL https://www.toshiseibi.metro.tokyo.lg.jp/documents/d/toshiseibi/pdf_kenchiku_tank_pdf_p_tank03_itiran は日付を含まないので安定しているが、拡張子が無いため現状の fetch では取れない。"
+     }
+   ],
+   "download": {
+    "text_pattern": "浄化槽工事業者登録一覧"
+   }
+  },
+  {
+   "scheme_id": "pref-13.demolition",
+   "authority_id": "pref-13",
+   "trade": "demolition",
+   "license_name": "東京都解体工事業登録",
+   "validity_years": 5,
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.toshiseibi.metro.tokyo.lg.jp/ryokuchi_keikan/shoshigen/recy/6",
+   "contact": "東京都都市整備局 市街地建築部 建設業課 解体登録担当（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二本庁舎3階南側、代表 03-5321-1111 内線 30-666、平日9時から17時）",
+   "terms_of_use": "東京都都市整備局サイトポリシー（https://www.toshiseibi.metro.tokyo.lg.jp/about.html）。「当サイトに掲載している個々の情報（文章、写真、イラストなど）の著作権は、原則として東京都都市整備局に帰属します」「無断で複製・転用することはできません」。この一覧には、同じ局の建設業許可業者名簿に付いている「商用利用、出版、不特定又は多数に対して二次配布することは許可しません」のような個別注記は付いていない（掲載ページ本文を確認。2026-10-31）。オープンデータ（CC BY）指定は無い。抽出データをリポジトリに置いてよいかは要判断で、置く場合は出典「東京都都市整備局」を明記する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "原本に代表者氏名と技術管理者の氏名が入っている。代表者名は照合用途に限り、地図や公開成果物には出さない。技術管理者名は照合にも使わないので取り込まない。"
+    },
+    {
+     "severity": "info",
+     "body": "原本は「解体工事業者登録一覧【令和８年度９月末現在】」（PDF 2.80MB、74ページ、2,353件＝最終行の No. が2353。PDF作成 2026-10-13、掲載ページ更新日 2026-10-21）。列は No.／登録番号／登録年月日／商号名称／区市町村名／住所／電話番号／代表者氏名／技術管理者。区市町村名と住所が別の列に分かれており、区市町村名には「神奈川県川崎市」「埼玉県八潮市」のように他県の市も入る（都外に所在する業者も東京都の登録を受けている）。住所の列には区市町村名が入っていないので、2列を連結しないと住所にならない。"
+    },
+    {
+     "severity": "info",
+     "body": "登録は5年間有効。登録年月日の列はあるが有効期限の列が無いので、valid_until は登録年月日＋5年から出すことになる（原本に無い値なので推定扱い）。和暦の略記（R8.7.30／R3.10.1）で入っている。"
+    },
+    {
+     "severity": "info",
+     "body": "建設業許可（土木工事業・建築工事業・解体工事業）があれば解体工事業登録は不要。したがって登録が無いことは解体工事を請け負えないことを意味しない（pref-13.construction と合わせて見る）。"
+    },
+    {
+     "severity": "info",
+     "body": "更新頻度の明記は無いが、四半期ごとの「○年度○月末現在」で差し替えられていると見られる（令和５年７月末、令和６年５月末、令和８年度９月末の版を確認）。ファイルURLは更新のたびに変わる（今回は /documents/d/toshiseibi/2026-10-14-094237-686）ので、リンクの文字「解体工事業者登録一覧」で探す。拡張子が無いURLなので現状の fetch では取れない。"
+    }
+   ],
+   "download": {
+    "text_pattern": "解体工事業者登録一覧"
+   }
+  },
+  {
+   "scheme_id": "pref-13.electrical",
+   "authority_id": "pref-13",
+   "trade": "electrical",
+   "license_name": "東京都登録電気工事業者",
+   "validity_years": 5,
+   "publication_format": "phone_only",
+   "source_url": "https://www.kankyo.metro.tokyo.lg.jp/safety/electric",
+   "contact": "東京都環境局 環境改善部 環境保安課 火薬電気担当（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二本庁舎20階北側、電話 03-5388-3553）",
+   "terms_of_use": "名簿の公開なし。都のページには登録業者の一覧が無く、登録簿の閲覧・謄本交付の案内も見当たらない。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "東京都知事登録の登録電気工事業者について、一覧・名簿の公開は見当たらない。この制度は地図に出せない。確認したページ: https://www.kankyo.metro.tokyo.lg.jp/safety/electric （制度の入口、更新日2023-11-01）／https://www.kankyo.metro.tokyo.lg.jp/safety/electric/touroku （建設業許可をお持ちでない方の申請・届出、更新日2025-04-01）／https://www.kankyo.metro.tokyo.lg.jp/safety/electric/300400a20220810101017214 （申請先）。どれも手引き・様式・申請方法だけで、業者一覧は無い。CMPA-3 で神奈川県・経済産業大臣が同じく phone_only と分かっており、東京都も同じだった。"
+    },
+    {
+     "severity": "important",
+     "body": "登録簿の閲覧・謄本交付については、都のページに手数料も請求先も書かれているのを確認できなかった。電気工事業法第16条に謄本交付請求・閲覧の制度があり、経済産業大臣登録分の窓口と手数料は national.json の meti.electrical に書いてある。都知事登録分の請求方法は環境保安課へ要確認（このタスクでは電話確認をしていない）。"
+    },
+    {
+     "severity": "info",
+     "body": "登録の有効期間は5年。「登録の有効期間は5年間です。5年の更新毎に登録番号は変わります。」とあるので、登録番号は更新のたびに変わる（license_no を照合キーにしにくい）。新規登録手数料は22,000円。"
+    },
+    {
+     "severity": "info",
+     "body": "東京都電気工事工業組合（https://www.tokoso.jp/）などの業界団体が会員一覧を出しているが、登録簿そのものではない。令和７年４月１日から、申請届出資料の問い合わせ対応・受付・内容確認は同組合に委託されている（電話 03-6363-2244、受付9時から11時半・13時から16時半）。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-13.construction",
+   "authority_id": "pref-13",
+   "trade": "construction",
+   "license_name": "東京都知事 建設業許可",
+   "validity_years": 5,
+   "publication_format": "search_system",
+   "source_url": "https://etsuran2.mlit.go.jp/TAKKEN/kensetuKensaku.do",
+   "contact": "東京都都市整備局 市街地建築部 建設業課（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二本庁舎3階南側、代表 03-5321-1111 内線 30-661・662・666・671＝新規・業種追加、30-692から695・689＝更新・変更）",
+   "terms_of_use": "国土交通省のサイトポリシー（https://www.mlit.go.jp/link.html）。公共データ利用規約（PDL1.0）に準拠した条件で、出典の記載が必要。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "東京都も全件名簿を出している（建設業許可業者名簿 https://www.toshiseibi.metro.tokyo.lg.jp/kenchiku_kaihatsu/kenchiku_shidou/gyosya_shido/kensetsu/tokyou_kensetsu_meibo 。許可番号順・商号カナ名順のExcel 9.6MB/10.1MBとPDF 18.8MB/18.7MB、令和８年９月末時点、更新日2026-10-20）が、ページに「この建設業者一覧及びこの建設業者一覧を加工・変更したものを商用利用、出版、不特定又は多数に対して二次配布することは許可しません。」と明記されている。再配布が禁じられているので、この名簿からの抽出データはリポジトリにコミットしない。照合は国土交通省の検索システム（PDL1.0・出典記載で可）で行う。"
+    },
+    {
+     "severity": "info",
+     "body": "都の名簿は建設業情報管理センターの登録情報から月1回程度（月末締めで翌20日前後に掲載）。内容は 商号カナ・許可番号・許可年月日・主たる営業所の所在地・業種区分・資本金・届出済みの直近決算期の締め日。許可申請書等の閲覧を補完する目的で公開されているもので、施工能力などは建設業課の閲覧コーナーで見るよう案内されている。"
+    },
+    {
+     "severity": "info",
+     "body": "請負代金500万円以上（建築一式は1,500万円以上）の工事に必要。検索システムの掲載情報は月2回の更新で、直近の変更は反映されていないことがある。更新申請中の場合は、許可の有効期間を過ぎても処分が行われるまで許可は有効として扱われる。"
+    }
+   ]
+  }
+ ],
+ "municipalities": {
+  "千代田区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "中央区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "港区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "新宿区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "文京区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "台東区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "墨田区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "江東区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "品川区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "目黒区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "大田区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "世田谷区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "渋谷区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "中野区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "杉並区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "豊島区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "北区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "荒川区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "板橋区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "練馬区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "足立区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "葛飾区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "江戸川区": {"jurisdiction": {"water": ["tokyo-suido"], "sewer": ["tokyo-gesui"]}},
+  "八王子市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "立川市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "三鷹市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "青梅市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "府中市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "調布市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "町田市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "小金井市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "小平市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "日野市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "東村山市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "国分寺市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "国立市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "福生市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "狛江市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "東大和市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "清瀬市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "東久留米市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "武蔵村山市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "多摩市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "稲城市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "あきる野市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "西東京市": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "瑞穂町": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "日の出町": {"jurisdiction": {"water": ["tokyo-suido"]}},
+  "奥多摩町": {"jurisdiction": {"water": ["tokyo-suido"]}}
+ },
+ "overrides": []
+}
