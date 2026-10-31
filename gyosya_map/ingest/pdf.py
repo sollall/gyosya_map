@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .columns import extract, map_header
+from ..normalize import nfkc
+from .columns import ALIASES, extract, map_header
 from .config import ParserConfig
 
 # 告示の見出し → 異動の種類。上から順に判定する（「指定の取消」を「指定」と誤らない）
@@ -62,6 +63,10 @@ def parse_pdf_list(path: str | Path, config: ParserConfig | None = None) -> list
                 if rec:
                     rec["needs_review"] = True
                     records.append(rec)
+    if not records:
+        records = [{**r, "needs_review": True} for r in parse_text_records(_lines(path), config)]
+        for r in records:
+            r.pop("event", None)
     return records
 
 
@@ -93,10 +98,92 @@ def parse_notice_pdf(path: str | Path, config: ParserConfig | None = None) -> li
                     continue
                 rec["needs_review"] = True
                 events.append(rec)
+    if not events:
+        # 表になっていない告示（「指定番号 第2096号」「氏名又は名称 ○○」の行が並ぶ形）
+        events = [{**r, "needs_review": True} for r in parse_text_records(_lines(path), config, notice=True)
+                  if r.get("event")]
     return events
 
 
 _ISSUER = re.compile(r"(市長|町長|村長|区長|知事|管理者|局長|大臣)")
+
+
+def _lines(path: str | Path) -> list[str]:
+    import pdfplumber
+
+    with pdfplumber.open(path) as pdf:
+        return [nfkc(l).strip() for page in pdf.pages for l in (page.extract_text() or "").splitlines()]
+
+
+def _label_regex(word: str) -> str:
+    # 「指 定 番 号」のように文字の間に空白が入っても当てる
+    return r"\s*".join(re.escape(ch) for ch in word)
+
+
+def _label_patterns(config: ParserConfig) -> list[tuple[str, re.Pattern]]:
+    words = []
+    for f, aliases in ALIASES.items():
+        if f == "event":
+            continue
+        for w in {*aliases, *config.aliases.get(f, ())}:
+            words.append((f, w))
+    words.sort(key=lambda fw: len(fw[1]), reverse=True)
+    # 行頭の項目番号（「１ 指定番号」の「１」）は読み飛ばす
+    return [(f, re.compile(r"^(?:[0-9]+[.．)）]?\s+)?" + _label_regex(w) + r"\s*[:：]?\s*(.*)$")) for f, w in words]
+
+
+_PERIOD = re.compile(r"有\s*効\s*期\s*間\s*[:：]?\s*(.+?)\s*から\s*(.+?)\s*まで")
+
+
+def parse_text_records(lines: list[str], config: ParserConfig | None = None, notice: bool = False) -> list[dict]:
+    """表になっていない名簿・告示を読む。
+
+        １ 指 定 番 号 第２０９６号
+        氏名又は名称 株式会社○○
+        住 所 横浜市緑区…
+        有 効 期 限 令和１３年９月３０日
+
+    のように「項目名 値」の行が並び、番号の行で1件が始まる形。「指定有効期間 …から …まで」が
+    冒頭にまとめて書かれていれば全件に当てはめる。告示なら、題名（「〜の指定について」）や
+    途中の見出し（「廃止した者」など）から異動の種類を決める。
+    """
+    config = config or ParserConfig()
+    patterns = _label_patterns(config)
+    joined = " ".join(lines)
+    common: dict = {}
+    if m := _PERIOD.search(joined):
+        common = {"valid_from": m.group(1), "valid_until": m.group(2)}
+
+    event = config.default_event
+    records: list[dict] = []
+    cur: dict | None = None
+    for line in lines:
+        hit = None
+        for f, rx in patterns:
+            if m := rx.match(line):
+                hit = (f, m.group(1).strip())
+                break
+        if hit is None or not hit[1]:
+            if notice and cur is None or notice and len(line) <= 30:
+                # 題名・見出し。新規の語（「指定」）だけでは種類を変えない（「２ 指定工事店」など）
+                e = classify_event(line, config)
+                if e and (e != "new" or event is None or re.search("新規|新たに", line)):
+                    event = e
+            continue
+        f, value = hit
+        if f == "license_no":
+            if cur:
+                records.append(cur)
+            cur = {**common, "license_no": value}
+            if notice:
+                cur["event"] = event
+        elif cur is not None and f not in cur or (cur is not None and f in common):
+            cur[f] = value
+    if cur:
+        records.append(cur)
+    return [r for r in records if r.get("license_no") and r.get("name")
+            and not (config.skip(r["name"]))]
+
 
 
 def detect_notice_date(path: str | Path):

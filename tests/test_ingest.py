@@ -159,3 +159,87 @@ def test_scheme_parser_config_from_seed(conn):
         "municipalities": {"藤沢市": {"public_sewer": True}}})
     cfg = load_for_scheme(conn, "muni-142051.waste")
     assert cfg.header_row == 4 and cfg.aliases == {"name": ["屋号"]}
+
+
+# 川崎市の告示（2026年10月時点）と同じ書式。業者・代表者は架空
+WATER_NOTICE = """川崎市上下水道局告示第５４号
+川崎市上下水道局指定給水装置工事事業者の指定について
+川崎市上下水道局指定給水装置工事事業者規程（平成１０年川崎市水道局規
+程第３号）第４条の規定に基づき、川崎市上下水道局指定給水装置工事事業者
+として次の者を指定したので、同規程第９条第１号の規定により告示します。
+令和８年９月３０日
+川崎市上下水道事業管理者 見本 太郎
+１ 指 定 番 号 第２０９６号
+氏名又は名称 株式会社ＳＡＭＰＬＥ
+住 所 横浜市緑区西八朔町１番地
+代 表 者 氏 名 架空 一郎
+指 定 年 月 日 令和８年１０月１日
+有 効 期 限 令和１３年９月３０日
+２ 指 定 番 号 第２０９７号
+氏名又は名称 株式会社ＴＥＳＴ ＨＯＵＳＥ
+住 所 川崎市多摩区宿河原二丁目１番１号
+代 表 者 氏 名 架空 二郎
+指 定 年 月 日 令和８年１０月１日
+有 効 期 限 令和１３年９月３０日""".splitlines()
+
+SEWER_NOTICE = """川崎市上下水道局告示第３２号
+川崎市排水設備指定工事店の指定について
+川崎市排水設備指定工事店の指定等に関する規程（平成２２年川崎市水道局
+規程第６４号）第５条の規定に基づき、川崎市排水設備指定工事店として指定
+したので、同規程第１２条第１号の規定により告示します。
+令和８年６月２５日
+川崎市上下水道事業管理者 見 本 太 郎
+１ 指定有効期間
+令和 ８年 ７月０１日から
+令和１３年 ４月３０日まで
+２ 指定工事店
+指定番号 １３０６
+商号又は名称 見本管工事有限会社
+営業所所在地 横浜市泉区中田西四丁目１番１号
+代表者氏名 架空 三郎
+指定番号 １９７
+商号又は名称 株式会社サンプル工業
+営業所所在地 川崎市幸区遠藤町１番１
+代表者氏名 架空 四郎""".splitlines()
+
+
+def _text_pdf(path, lines):
+    return make_pdf(path, [(line, []) for line in lines])
+
+
+def test_text_notice_water(tmp_path):
+    from gyosya_map.ingest.pdf import detect_notice_date
+
+    f = _text_pdf(tmp_path / "7422.pdf", WATER_NOTICE)
+    evs = parse_notice_pdf(f)
+    assert [(e["event"], e["license_no"], e["name"]) for e in evs] == [
+        ("new", "第2096号", "株式会社SAMPLE"), ("new", "第2097号", "株式会社TEST HOUSE")]
+    assert evs[1]["address"] == "川崎市多摩区宿河原二丁目1番1号"
+    assert (evs[0]["valid_from"], evs[0]["valid_until"]) == ("令和8年10月1日", "令和13年9月30日")
+    assert evs[0]["representative"] == "架空 一郎"
+    assert detect_notice_date(f) == dt.date(2026, 9, 30)
+
+
+def test_text_notice_sewer_with_common_period(tmp_path, conn, raw_dir):
+    from gyosya_map.ingest.pdf import detect_notice_date
+
+    f = _text_pdf(tmp_path / "6517.pdf", SEWER_NOTICE)
+    evs = parse_notice_pdf(f)
+    assert [(e["event"], e["license_no"], e["name"], e["address"]) for e in evs] == [
+        ("new", "1306", "見本管工事有限会社", "横浜市泉区中田西四丁目1番1号"),
+        ("new", "197", "株式会社サンプル工業", "川崎市幸区遠藤町1番1")]
+    assert all((e["valid_from"], e["valid_until"]) == ("令和 8年 7月01日", "令和13年 4月30日") for e in evs)
+    d = detect_notice_date(f)
+    assert d == dt.date(2026, 6, 25)
+    doc, _ = store_document(conn, "kawasaki-suido.sewer", f, kind="notice", raw_dir=raw_dir)
+    apply_notice_events(conn, "kawasaki-suido.sewer", evs, doc_id=doc, notice_date=d, today=TODAY)
+    row = _licensee(conn, "kawasaki-suido.sewer", "197")
+    assert (row["valid_from"], row["valid_until"], row["status"]) == ("2026-07-01", "2031-04-30", "active")
+
+
+def test_text_notice_revoke_section(tmp_path):
+    lines = ["指定給水装置工事事業者の指定の廃止について", "次の者から廃止の届出があったので告示します。",
+             "令和８年９月３０日", "川崎市上下水道事業管理者 見本 太郎",
+             "１ 指 定 番 号 第１号", "氏名又は名称 架空設備", "住 所 川崎市幸区１"]
+    assert [(e["event"], e["license_no"]) for e in parse_notice_pdf(_text_pdf(tmp_path / "r.pdf", lines))] == \
+        [("revoke", "第1号")]
