@@ -281,10 +281,13 @@ def _fetch(conn, a) -> int:
     failed = 0
     for scheme_id in schemes:
         if a.list:
-            links = list_links(conn, scheme_id)
+            errors: list[str] = []
+            links = list_links(conn, scheme_id, errors=errors)
             print(f"{scheme_id}: {len(links)} 件")
             for link in links:
                 print(f"  {link.text or '—'}\t{link.url}")
+            for e in errors:
+                print(f"  {e}", file=sys.stderr)
             continue
         try:
             files = download_scheme(conn, scheme_id, a.dest)

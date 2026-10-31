@@ -5,7 +5,8 @@ from conftest import TODAY
 from fixtures import make_xlsx
 
 from gyosya_map import db
-from gyosya_map.ingest.download import DownloadConfig, decode_html, download_scheme, find_links, list_links
+from gyosya_map.ingest.download import (DownloadConfig, Link, decode_html, dest_name, disposition_filename,
+                                        download_scheme, find_links, is_file_content, is_file_url, list_links)
 
 PAGE = "https://www.pref.example.jp/docs/kaitai/index.html"
 HTML = """<html><head><meta charset="Shift_JIS"></head><body>
@@ -37,6 +38,143 @@ def test_decode_shift_jis_page():
 def test_config_validation():
     with pytest.raises(ValueError):
         DownloadConfig(pick="newest")
+
+
+# --- 拡張子の無いURL（東京都の新CMS）--------------------------------------------------
+# 掲載ページ https://www.waterworks.metro.tokyo.lg.jp/kurashi/shitei/ichiran の実物に合わせた形。
+# ファイルは拡張子の無い /documents/d/<局>/<ID> で配られ、HEAD だけが形式を教える。
+CMS_PAGE = "https://www.waterworks.metro.tokyo.lg.jp/kurashi/shitei/ichiran"
+CMS_HTML = """<html><body>
+<a href="/kurashi/shitei">指定給水装置工事事業者について</a>
+<a href="/documents/d/waterworks/103013001-01-1" target="_blank">東京23区<img alt="PDF">（2.41MB）</a>
+<a href="/documents/d/waterworks/103013001-01-2" target="_blank">多摩地区・他府県など<img alt="PDF">（2.53MB）</a>
+<a href="/documents/d/waterworks/103013001-03">新規指定事業者一覧（令和８年９月指定分）<img alt="PDF">（269KB）</a>
+<a href="/tetsuduki/suidoapp">東京都水道局アプリのダウンロード・登録方法</a>
+</body></html>"""
+PDF_HEADERS = {"content-type": "application/pdf",
+               "content-disposition": 'inline; filename="103013001-01-1.pdf"'}
+CMS_HEADERS = {
+    "https://www.waterworks.metro.tokyo.lg.jp/documents/d/waterworks/103013001-01-1": PDF_HEADERS,
+    "https://www.waterworks.metro.tokyo.lg.jp/documents/d/waterworks/103013001-01-2":
+        {"content-type": "application/pdf", "content-disposition": 'inline; filename="103013001-01-2.pdf"'},
+    "https://www.waterworks.metro.tokyo.lg.jp/documents/d/waterworks/103013001-03":
+        {"content-type": "application/pdf"},
+    "https://www.waterworks.metro.tokyo.lg.jp/tetsuduki/suidoapp": {"content-type": "text/html;charset=UTF-8"},
+}
+
+
+def _fake_prober(headers):
+    """HEAD の代わり。実ネットワークには出ない。"""
+    def prober(url):
+        calls.append(url)
+        if url not in headers:
+            raise OSError(f"HTTP Error 404: {url}")
+        return headers[url]
+    calls = prober.calls = []
+    return prober
+
+
+def test_is_file_url_uses_extension_without_touching_the_network():
+    never = _fake_prober({})
+    assert is_file_url("https://www.pref.example.jp/documents/123/meibo.XLSX", never)
+    assert is_file_url("https://www.pref.example.jp/docs/%E5%90%8D%E7%B0%BF.pdf", never)
+    assert not is_file_url(CMS_PAGE + "/index.html", never)
+    assert not is_file_url("mailto:x@example.jp", never)
+    assert never.calls == []        # 拡張子で決まるURLには HEAD を打たない
+    # prober が無ければ拡張子だけで見るので、拡張子の無いURLは従来どおり見つからない
+    assert not is_file_url(CMS_PAGE + "/documents/d/waterworks/103013001-01-1")
+
+
+def test_is_file_url_falls_back_to_head_content_type():
+    url = "https://www.waterworks.metro.tokyo.lg.jp/documents/d/waterworks/103013001-01-1"
+    prober = _fake_prober(CMS_HEADERS)
+    assert is_file_url(url, prober)
+    assert not is_file_url("https://www.waterworks.metro.tokyo.lg.jp/tetsuduki/suidoapp", prober)
+    assert prober.calls == [url, "https://www.waterworks.metro.tokyo.lg.jp/tetsuduki/suidoapp"]
+
+
+@pytest.mark.parametrize("headers, expected", [
+    ({"content-type": "application/pdf"}, True),
+    ({"content-type": "APPLICATION/PDF; charset=binary"}, True),
+    ({"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}, True),
+    ({"content-type": "application/vnd.ms-excel"}, True),
+    ({"content-type": "text/csv; charset=Shift_JIS"}, True),
+    ({"content-type": "text/html; charset=utf-8"}, False),
+    ({}, False),
+    # 形式を octet-stream で返すCMSは、添付指定かファイル名の拡張子で見る
+    ({"content-type": "application/octet-stream", "content-disposition": "attachment"}, True),
+    ({"content-type": "application/octet-stream"}, False),
+    ({"content-type": "application/octet-stream",
+      "content-disposition": 'attachment; filename="tebiki.html"'}, False),
+    ({"content-type": "text/html", "content-disposition": 'attachment; filename="meibo.xlsx"'}, True),
+    ({"content-type": "application/zip", "content-disposition": "attachment"}, False),
+    ({"content-disposition": "attachment; filename*=UTF-8''%E5%90%8D%E7%B0%BF.csv"}, True),
+])
+def test_is_file_content(headers, expected):
+    assert is_file_content(headers) is expected
+
+
+def test_disposition_filename():
+    assert disposition_filename({"content-disposition": 'inline; filename="103013001-01-1.pdf"'}) \
+        == "103013001-01-1.pdf"
+    assert disposition_filename({"content-disposition": "attachment; filename=meibo.xlsx; size=10"}) \
+        == "meibo.xlsx"
+    assert disposition_filename({"content-disposition": "attachment; filename*=UTF-8''%E5%90%8D%E7%B0%BF.csv"}) \
+        == "名簿.csv"
+    assert disposition_filename({}) == ""
+
+
+def test_find_links_probes_only_download_like_links():
+    prober = _fake_prober(CMS_HEADERS)
+    links = find_links(CMS_HTML, CMS_PAGE, prober=prober)
+    assert [l.url.rsplit("/", 1)[1] for l in links] == ["103013001-01-1", "103013001-01-2", "103013001-03"]
+    # 形式・サイズの表示が無いリンク（/kurashi/shitei）には HEAD を打たない。
+    # 「ダウンロード」の語があるページは打つが Content-Type で落ちる
+    assert prober.calls == [l.url for l in links] + ["https://www.waterworks.metro.tokyo.lg.jp/tetsuduki/suidoapp"]
+    # 絞り込みがあるときはその中だけを確かめる
+    one = find_links(CMS_HTML, CMS_PAGE, DownloadConfig(href_pattern="103013001-01-1"),
+                     prober=(p2 := _fake_prober(CMS_HEADERS)))
+    assert [l.url for l in one] == p2.calls == [links[0].url]
+
+
+def test_find_links_records_probe_failures_and_truncation():
+    errors: list[str] = []
+    assert find_links(CMS_HTML, CMS_PAGE, prober=_fake_prober({}), errors=errors) == []
+    assert len(errors) == 4 and all("ヘッダを取れませんでした" in e for e in errors)
+    errors.clear()
+    links = find_links(CMS_HTML, CMS_PAGE, prober=_fake_prober(CMS_HEADERS), max_probes=1, errors=errors)
+    assert len(links) == 1 and len(errors) == 1 and "打ち切りました" in errors[0]
+
+
+def test_dest_name_adds_extension_for_extensionless_url(conn, tmp_path):
+    db.load_seed_data(conn, {"schemes": [{"scheme_id": "tokyo-suido.water", "authority_id": "pref-13",
+                                          "trade": "water", "license_name": "東京都指定給水装置工事事業者",
+                                          "publication_format": "full_list_pdf", "source_url": CMS_PAGE,
+                                          "download": {"href_pattern": "103013001-01-", "pick": "all"}}]})
+    f = _fake_fetcher({CMS_PAGE: CMS_HTML.encode(),
+                       **{u: b"%PDF-1.4" for u in list(CMS_HEADERS)[:2]}})
+    got = download_scheme(conn, "tokyo-suido.water", tmp_path / "dl", fetcher=f, today=TODAY,
+                          prober=_fake_prober(CMS_HEADERS))
+    # Content-Disposition のファイル名から .pdf を補う（拡張子が無いとパーサーを選べない）
+    assert [d.path.name for d in got] == ["103013001-01-1.pdf", "103013001-01-2.pdf"]
+    assert all(d.path.read_bytes() == b"%PDF-1.4" for d in got)
+    # Content-Disposition が無ければ Content-Type から補う
+    assert dest_name(find_links(CMS_HTML, CMS_PAGE, prober=_fake_prober(CMS_HEADERS))[2]) \
+        == "103013001-03.pdf"
+
+
+@pytest.mark.parametrize("disposition, expected", [
+    ('inline; filename="名簿 R0810 .pdf"', "名簿 R0810 .pdf"),           # 原本の名前はそのまま使う
+    ('attachment; filename="../../etc/meibo.csv"', "meibo.csv"),        # ディレクトリは落とす
+    ('attachment; filename="..\\\\..\\\\meibo.xls"', "meibo.xls"),
+    ('attachment; filename=" meibo.xlsx "', "meibo.xlsx"),
+    ('attachment; filename="tebiki.html"', "2026-10-14-094237-686.pdf"),  # 名簿の拡張子でなければ使わない
+    ("attachment", "2026-10-14-094237-686.pdf"),
+])
+def test_dest_name_keeps_the_file_inside_the_destination(disposition, expected):
+    url = "https://www.toshiseibi.metro.tokyo.lg.jp/documents/d/toshiseibi/2026-10-14-094237-686"
+    assert dest_name(Link(url, "", {"content-type": "application/pdf", "content-disposition": disposition})) \
+        == expected
 
 
 def _fake_fetcher(files):
