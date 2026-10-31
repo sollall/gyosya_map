@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -172,3 +173,15 @@ def resolve(conn: sqlite3.Connection, location: Location, scheme_trade: str) -> 
 
 def resolve_trade(conn: sqlite3.Connection, location: Location, trade: Trade) -> dict[str, Resolution]:
     return {st: resolve(conn, location, st) for st in trade.scheme_trades}
+
+
+def scheme_covers(location: Location, excluded_municipalities: str | None) -> bool:
+    """その制度がこの所在地を対象にしているか（scheme.excluded_municipalities を見る）。
+
+    担当機関は業種（trade）単位で決まるので、同じ機関の制度でも対象の範囲が違うことがある。
+    例えば埼玉県浄化槽保守点検業者登録の対象は「さいたま市、川越市、川口市及び越谷市を除く」県内で、
+    除かれた市の住所でこの制度を候補にすると、県の名簿に載っていないことを根拠に
+    「未登録」と誤判定してしまう。行政区の住所は市のコードで除外できる。
+    """
+    excluded = set(json.loads(excluded_municipalities)) if excluded_municipalities else set()
+    return not ({location.code, location.city_code} & excluded)

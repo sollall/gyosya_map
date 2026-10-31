@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Protocol
 
 from .freshness import is_stale, roster_fetched_at
-from .jurisdiction import resolve_location, resolve_trade
+from .jurisdiction import resolve_location, resolve_trade, scheme_covers
 from .normalize import normalize_address, normalize_license_no, normalize_name, parse_date, to_wareki
 from .trades import get_trade
 
@@ -195,13 +195,24 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
 
     ph_t = ",".join("?" * len(t.scheme_trades))
     ph_a = ",".join("?" * len(local_auth))
-    local = conn.execute(
+    found = conn.execute(
         f"""SELECT s.*, a.name AS authority_name FROM scheme s JOIN authority a USING (authority_id)
             WHERE s.trade IN ({ph_t}) AND s.authority_id IN ({ph_a}) ORDER BY s.scheme_id""",
         (*t.scheme_trades, *local_auth)).fetchall()
+    # 担当機関が合っていても、制度の側がこの市区町村を対象にしていないことがある
+    local: list[sqlite3.Row] = []
+    out_of_scope: list[sqlite3.Row] = []
+    for s in found:
+        (local if scheme_covers(loc, s["excluded_municipalities"]) else out_of_scope).append(s)
     if not local:
         result.message = f"{loc.municipality}の{t.label}の制度情報はまだ整備されていません。"
+        if out_of_scope:
+            names = "・".join(dict.fromkeys(s["license_name"] for s in out_of_scope))
+            result.message += f"（{names}は{loc.municipality}を対象外としています）"
         return result
+    for s in out_of_scope:
+        result.warnings.append(f"{s['license_name']}は{loc.municipality}を対象外としているため、"
+                               "候補から外しました。")
 
     # 3. 検索システム型は照会時に問い合わせる（該当なし＝空リスト、問い合わせ失敗＝None）
     live: dict[str, list[dict] | None] = {}
@@ -273,16 +284,23 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
         result.evidence = [_evidence(x) for x in hits]
         return result
 
-    # 5. 広告にある別の機関の番号・名前
+    # 5. 広告にある別の機関・別の対象地域の番号・名前（対象外として外した制度もここに入る）
+    local_ids = [s["scheme_id"] for s in local]
+    ph_l = ",".join("?" * len(local_ids))
     other_ids = [x[0] for x in conn.execute(
-        f"SELECT scheme_id FROM scheme WHERE trade IN ({ph_t}) AND authority_id NOT IN ({ph_a})",
-        (*t.scheme_trades, *local_auth))]
+        f"SELECT scheme_id FROM scheme WHERE trade IN ({ph_t}) AND scheme_id NOT IN ({ph_l})",
+        (*t.scheme_trades, *local_ids))]
     others = [r for r in _find(conn, other_ids, license_no, name, business_address) if _is_valid(r, today)]
     local_names = "・".join(dict.fromkeys(s["authority_name"] for s in local))
     if others:
         result.verdict = OTHER_ONLY
-        other_names = "・".join(dict.fromkeys(r["authority_name"] for r in others))
-        result.message = f"{other_names}の公認はあるが、{local_names}の公認は確認できない"
+        if {r["authority_name"] for r in others} & {s["authority_name"] for s in local}:
+            # 同じ機関の、対象地域が違う制度。機関名では区別できないので制度名で出す
+            result.message = ("・".join(dict.fromkeys(r["license_name"] for r in others)) + "はあるが、"
+                              + "・".join(dict.fromkeys(s["license_name"] for s in local)) + "は確認できない")
+        else:
+            other_names = "・".join(dict.fromkeys(r["authority_name"] for r in others))
+            result.message = f"{other_names}の公認はあるが、{local_names}の公認は確認できない"
         result.evidence = [_evidence(x) for x in others]
         if any(s.completeness != "high" for s in result.schemes):
             result.warnings.append(f"{local_names}の名簿は完全ではないため、未掲載でも公認がないとは限りません。")

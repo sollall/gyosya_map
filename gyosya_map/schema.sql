@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS scheme (
     contact            TEXT,
     terms_of_use       TEXT,                -- 公開資料の再利用条件
     required_sub_scope TEXT,                -- 範囲として必須の項目（例: 一時多量ごみ）
+    excluded_municipalities TEXT,           -- 制度の対象外の市区町村コード（6桁のJSON配列。NULL = 制限なし）
+                                            -- 管轄は業種単位で決まるが、制度の側に対象外の市区町村が
+                                            -- あることがある（例: 埼玉県浄化槽保守点検業者登録は
+                                            -- 「さいたま市、川越市、川口市及び越谷市を除く」県内）
     parser_config      TEXT,                -- 名簿の読み込み設定（JSON。ingest/config.py）
     download_config    TEXT,                -- 名簿ファイルの探し方（JSON。ingest/download.py）
     verified_at        TEXT

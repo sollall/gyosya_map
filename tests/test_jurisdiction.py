@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from gyosya_map.jurisdiction import AddressError, resolve, resolve_location
+from gyosya_map.jurisdiction import AddressError, resolve, resolve_location, scheme_covers
 
 
 def test_resolves_ward_code_and_town(conn):
@@ -82,6 +84,42 @@ def test_default_rules_for_unconfigured_municipality(conn):
     assert resolve(conn, fujisawa, "septic").authority_ids == ["muni-142051", "pref-14"]
     # 特別区は区が一般廃棄物を担当する
     assert resolve(conn, resolve_location(conn, "東京都港区芝1"), "waste").authority_ids == ["muni-131032"]
+
+
+def test_seed_excluded_municipalities_become_codes(conn):
+    """seed には市区町村名を書き、コードに直して持つ（書き順によらず同じ値になる）。"""
+    value = conn.execute("SELECT excluded_municipalities FROM scheme "
+                         "WHERE scheme_id = 'pref-11.septic-maintenance'").fetchone()[0]
+    # 埼玉県浄化槽保守点検業者登録の対象は「さいたま市、川越市、川口市及び越谷市を除く」県内
+    assert json.loads(value) == ["111007", "112011", "112038", "112224"]
+    # 東京都浄化槽保守点検業者登録は23区・八王子市・町田市が対象外
+    tokyo = conn.execute("SELECT excluded_municipalities FROM scheme "
+                         "WHERE scheme_id = 'pref-13.septic-maintenance'").fetchone()[0]
+    assert len(json.loads(tokyo)) == 25 and "131016" in json.loads(tokyo)
+
+
+def test_unknown_excluded_municipality_is_an_error(conn):
+    """書き間違いを黙って無視すると「対象外のはずの市で候補に出る」に戻ってしまう。"""
+    from gyosya_map import db
+
+    def load(key):
+        db.load_seed_data(conn, {"prefecture": "11", "schemes": [{
+            "scheme_id": "pref-11.x", "authority_id": "pref-11", "trade": "septic",
+            "license_name": "見本", "excluded_municipalities": [key]}]})
+
+    with pytest.raises(ValueError, match="特定できません"):
+        load("どこか市")
+    with pytest.raises(ValueError, match="excluded_municipalities"):
+        load("999999")
+
+
+def test_scheme_covers_excludes_city_and_its_wards(conn):
+    excluded = json.dumps(["111007", "112011"])           # さいたま市・川越市
+    assert not scheme_covers(resolve_location(conn, "埼玉県川越市元町1"), excluded)
+    # 行政区の住所は市のコードで外れる
+    assert not scheme_covers(resolve_location(conn, "埼玉県さいたま市西区西大宮1"), excluded)
+    assert scheme_covers(resolve_location(conn, "埼玉県所沢市並木1"), excluded)
+    assert scheme_covers(resolve_location(conn, "埼玉県川越市元町1"), None)
 
 
 def test_city_exception_applies_to_wards(conn):

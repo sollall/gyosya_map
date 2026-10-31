@@ -155,6 +155,37 @@ def test_representative_not_in_result(conn):
     assert "見本 太郎" not in str(r.to_dict()) and "見本 太郎" not in r.render()
 
 
+def test_scheme_excluded_municipality_is_not_a_candidate(conn):
+    """制度が対象外としている市区町村では、その制度を候補にしない。
+
+    対象外の市の住所で県の名簿に当たると、「県の名簿に無い＝未登録」という誤判定になる。
+    """
+    r = check(conn, address="埼玉県川越市元町1-3-1", trade="septic", name="載っていない業者", today=TODAY)
+    names = [s.license_name for s in r.schemes]
+    assert "埼玉県浄化槽保守点検業者登録" not in names      # 川越市は県知事登録の対象外
+    assert "埼玉県浄化槽工事業登録" in names                # 工事業は県が全域
+    assert r.verdict == UNDETERMINED
+    assert any("対象外" in w for w in r.warnings)
+    # 対象の市なら候補に残る
+    tokorozawa = check(conn, address="埼玉県所沢市並木1-1", trade="septic", name="載っていない業者", today=TODAY)
+    assert "埼玉県浄化槽保守点検業者登録" in [s.license_name for s in tokorozawa.schemes]
+    # 政令市の行政区の住所も、市のコードで対象外になる（市自身の制度は残る）
+    saitama = check(conn, address="埼玉県さいたま市西区西大宮1-1", trade="septic",
+                    name="載っていない業者", today=TODAY)
+    names = [s.license_name for s in saitama.schemes]
+    assert "埼玉県浄化槽保守点検業者登録" not in names and "さいたま市浄化槽保守点検業者登録" in names
+
+
+def test_excluded_scheme_is_still_other_authority(conn):
+    """対象外として外した制度に載っていれば「他機関の公認のみ」として根拠に出す。"""
+    _full(conn, "pref-11.septic-maintenance", [{"license_no": "S1", "name": "県登録メンテ"}])
+    r = check(conn, address="埼玉県川越市元町1-3-1", trade="septic", license_no="S1", today=TODAY)
+    assert r.verdict == OTHER_ONLY
+    assert [e.license_name for e in r.evidence] == ["埼玉県浄化槽保守点検業者登録"]
+    # 機関名はどちらも「埼玉県」なので、制度名で区別して出す
+    assert r.message == "埼玉県浄化槽保守点検業者登録はあるが、埼玉県浄化槽工事業登録は確認できない"
+
+
 def test_page_monitor_queues_changes_and_errors(conn):
     bodies = {}
 
