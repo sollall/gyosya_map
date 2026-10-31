@@ -154,3 +154,11 @@ def test_cli_fetch_imports_notice(tmp_path, monkeypatch, capsys):
     assert tuple(row) == ("2026-09-01", "active")
     # notice コマンドも --date を省略できる
     assert main(["--db", dbp, "--raw-dir", raw, "notice", "--scheme", "kawasaki-suido.sewer", "--file", str(pdf)]) == 0
+
+
+def test_ambiguous_links_without_filter_are_refused(conn, tmp_path):
+    db.load_seed_data(conn, {"schemes": [{"scheme_id": "muni-141305.septic-maintenance", "authority_id": "muni-141305",
+                                          "trade": "septic", "license_name": "x", "source_url": PAGE}]})
+    with pytest.raises(ValueError, match="どれが名簿か決められません") as e:
+        download_scheme(conn, "muni-141305.septic-maintenance", tmp_path, fetcher=_fake_fetcher({PAGE: HTML.encode()}))
+    assert "tebiki.pdf" in str(e.value)

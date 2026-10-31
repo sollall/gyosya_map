@@ -103,6 +103,15 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--trade", help="業種で絞る")
     sp.add_argument("--title", default="業者公認マップ")
 
+    sp = sub.add_parser("inspect", help="PDF・Excelから読み取れる文字と表をそのまま表示する（読み込み設定を作るため）")
+    sp.add_argument("--file", required=True)
+    sp.add_argument("--pages", type=int, default=2, help="PDFの先頭から何ページ見るか")
+    sp.add_argument("--rows", type=int, default=12, help="表・シートごとに何行出すか")
+
+    sp = sub.add_parser("purge", help="制度の取り込みデータ（名簿の行・原本の記録・取得日）を消す。原本ファイルは残す")
+    sp.add_argument("--scheme", required=True)
+    sp.add_argument("--yes", action="store_true", help="確認なしで消す")
+
     sub.add_parser("expire", help="有効期限切れの行を expired にする")
     sub.add_parser("monitor", help="掲載ページの変化を検知して再取得キューに入れる")
     sub.add_parser("schemes", help="制度の一覧")
@@ -155,6 +164,24 @@ def _run(a, conn) -> int:
         print(json.dumps({"records": len(records), **stats}, ensure_ascii=False))
     elif a.cmd == "fetch":
         return _fetch(conn, a)
+    elif a.cmd == "inspect":
+        from .ingest.inspect import inspect_file
+        print(inspect_file(Path(a.file), pages=a.pages, rows=a.rows))
+    elif a.cmd == "purge":
+        n = conn.execute("SELECT count(*) FROM licensee WHERE scheme_id = ?", (a.scheme,)).fetchone()[0]
+        docs = conn.execute("SELECT path FROM source_document WHERE scheme_id = ?", (a.scheme,)).fetchall()
+        if not a.yes:
+            print(f"{a.scheme}: 名簿の行 {n} 件、原本の記録 {len(docs)} 件を消します。")
+            for (path,) in docs:
+                print(f"  {path}")
+            if input("よろしいですか？ [y/N] ").strip().lower() != "y":
+                print("中止しました")
+                return 1
+        with conn:
+            conn.execute("DELETE FROM licensee WHERE scheme_id = ?", (a.scheme,))
+            conn.execute("DELETE FROM roster_fetch WHERE scheme_id = ?", (a.scheme,))
+            conn.execute("DELETE FROM source_document WHERE scheme_id = ?", (a.scheme,))
+        print(f"{a.scheme}: 名簿の行 {n} 件と原本の記録 {len(docs)} 件を消しました（原本ファイルは残しています）")
     elif a.cmd == "geo-update":
         from . import geo
         path = Path(a.file) if a.file else _download_large(geo.LATEST_CSV, Path("data/downloads/geolonia/latest.csv"))

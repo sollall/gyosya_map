@@ -40,7 +40,8 @@ uv run gyosya-map fetch --all --import
 ```
 
 ページに名簿以外のファイル（申請の手引きなど）もある場合は、seed の制度に `download` を書いて絞る。
-既定では条件に合う最初のリンクを取る。
+絞り込みの設定が無いままファイルのリンクが複数あるときは、推測で選ばずに候補を出して止まる。
+条件を書いた場合は、合う最初のリンクを取る。
 
 ```json
 "download": {"text_pattern": "登録業者名簿", "href_pattern": "\\.xlsx?$", "pick": "first"}
@@ -48,6 +49,16 @@ uv run gyosya-map fetch --all --import
 
 告示（差分）型も `--import` で取り込める。告示日は告示PDFの「日付＋告示者（市長・管理者など）」の行から読み取り、
 読み取れないときは `notice --date` での取り込みを案内する。
+
+### 読み取れないとき
+
+```bash
+# PDF・Excel から読み取れる文字と表をそのまま見る（見出しの行や列名を確かめる）
+uv run gyosya-map inspect --file data/downloads/<制度ID>/<日付>/<ファイル>
+
+# 間違ったファイルを取り込んだときは、その制度の取り込みデータを消す（原本ファイルは残る）
+uv run gyosya-map purge --scheme <制度ID>
+```
 
 ### 手元のファイルを取り込む
 

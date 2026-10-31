@@ -84,3 +84,29 @@ def test_init_upgrades_old_db_and_reset(tmp_path, capsys):
     assert main(["--db", dbp, "init"]) == 2
     assert "--reset" in capsys.readouterr().err
     assert main(["--db", dbp, "init", "--reset"]) == 0
+
+
+def test_inspect_and_purge(tmp_path, capsys):
+    from fixtures import make_pdf
+
+    dbp, raw = str(tmp_path / "g.db"), str(tmp_path / "raw")
+    main(["--db", dbp, "init"])
+    f = make_xlsx(tmp_path / "k.xlsx", [["第1号", "株式会社サンプル解体", "見本", "川崎市", "令和8年4月1日", None]])
+    pdf = make_pdf(tmp_path / "p.pdf", [("見出しの文", [["指定番号", "名称"], ["1", "サンプル"]])])
+    capsys.readouterr()
+    assert main(["--db", dbp, "inspect", "--file", str(f)]) == 0
+    assert "登録番号" in capsys.readouterr().out
+    assert main(["--db", dbp, "inspect", "--file", str(pdf)]) == 0
+    out = capsys.readouterr().out
+    assert "見出しの文" in out and "[表1]" in out and "指定番号 | 名称" in out
+
+    main(["--db", dbp, "--raw-dir", raw, "import", "--scheme", "pref-14.demolition", "--file", str(f)])
+    capsys.readouterr()
+    assert main(["--db", dbp, "purge", "--scheme", "pref-14.demolition", "--yes"]) == 0
+    assert "1 件" in capsys.readouterr().out
+    from gyosya_map import db
+    c = db.connect(dbp)
+    assert c.execute("SELECT count(*) FROM licensee").fetchone()[0] == 0
+    assert c.execute("SELECT count(*) FROM source_document").fetchone()[0] == 0
+    # 消したあとは同じファイルをもう一度取り込める
+    assert main(["--db", dbp, "--raw-dir", raw, "import", "--scheme", "pref-14.demolition", "--file", str(f)]) == 0

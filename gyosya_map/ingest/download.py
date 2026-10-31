@@ -156,6 +156,11 @@ def download_scheme(conn: sqlite3.Connection, scheme_id: str, dest_dir: str | Pa
         if not links:
             raise ValueError(f"{page} に条件に合う名簿ファイルのリンクがありません。"
                              f"`fetch --scheme {scheme_id} --list` でリンクを確かめ、seed の download を直してください")
+        if len(links) > 1 and not (config.text_pattern or config.href_pattern):
+            # どれが名簿か分からないまま最初のリンクを取ると、手引きや要綱を名簿として取り込んでしまう
+            listing = "\n".join(f"  {l.text or '—'}\t{l.url}" for l in links)
+            raise ValueError(f"{page} にファイルのリンクが {len(links)} 個あり、どれが名簿か決められません。\n{listing}\n"
+                             f"seed の制度 {scheme_id} に download.text_pattern か href_pattern を書いて絞ってください")
         if config.pick == "first":
             links = links[:1]
     out = []
