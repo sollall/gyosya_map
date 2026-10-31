@@ -1,0 +1,477 @@
+{
+ "_comment": "千葉県（県レベル）と政令市の千葉市。CMPA-10 の制度調査。担当機関は jurisdiction.py の既定ルールで決まり、ここには既定と違うものだけを書く。URLと件数は 2026-11-01 に実際にページ・原本を開いて確認した。`_notes` は調査所見で、db.py は読まない。",
+ "_notes": [
+  "水道（water）: 千葉県は県自身が水道事業者（千葉県企業局＝県営水道）で、指定給水装置工事事業者の指定も県企業局が行う。給水区域は11市（千葉市・船橋市・市川市・習志野市・松戸市・市原市・鎌ケ谷市・浦安市・成田市・印西市・白井市）で、全域が区域なのは千葉市（若葉区・緑区を除く4区）・市川市・鎌ケ谷市・浦安市だけ。船橋市・松戸市・市原市は「一部を除く」、習志野市・成田市は「一部」、印西市・白井市は「千葉ニュータウン」の町名だけで、町名単位の区域表が https://www.pref.chiba.lg.jp/suidou/souki/suidoukyoku/kyuusuikuiki.html （更新日 2026-09-02）に全部載っている。",
+  "水道の例外の書き方: 全域が県営水道の 市川市・鎌ケ谷市・浦安市 は municipalities.jurisdiction.water に企業局を入れた。一部だけが県営水道の7市（船橋市・松戸市・市原市・習志野市・成田市・印西市・白井市）は、残りの区域を担う市営水道などを調べていないので jurisdiction を書いていない（既定どおり water は空＝未整備のまま）。正しくやるなら上の町名表から jurisdiction_override（town_prefix 単位）を作る必要があり、担当範囲外なので手を付けていない。",
+  "千葉市の水道は3事業体が混在する。千葉市のページに「千葉市は千葉市営水道、千葉県営水道、四街道市営水道の3事業体から給水しております」とある（https://www.city.chiba.jp/suido/jigyo/siteimeibotop.html）。中央区・稲毛区・花見川区・美浜区の全域と若葉区・緑区の一部が県営水道、若葉区・緑区の残りが千葉市水道局で、四街道市営水道も若葉区の一部に給水している（市の区域図 https://www.city.chiba.jp/suido/somu/kyuukui-kuiki-wakaba.html ）。municipalities の千葉市には chiba-suido と chiba-kigyoukyoku の2つを入れたが、四街道市営水道は authority を作っていないので抜けている。",
+  "下水道（sewer）: 千葉県は流域下水道を持つが、排水設備指定工事店の指定は公共下水道の管理者＝市町村の権限で、既定ルールどおり。県レベルの制度は無い。",
+  "一般廃棄物（waste）: 市町村の権限で既定ルールどおり。産業廃棄物の処理業許可は県と保健所設置市（千葉市・船橋市・柏市）の権限だが、jurisdiction.py の waste の既定は市町村だけを指すので、産廃まで扱うなら既定ルール側の見直しが必要。今回は触っていない。千葉市の一般廃棄物の名簿は産業廃棄物指導課が出している（muni-121002.waste）。",
+  "浄化槽（septic）: 保守点検業の登録は「千葉市、船橋市及び柏市を除く県内市町村」が県知事、この3市は市長（https://www.pref.chiba.lg.jp/suiho/tetsuzuki/joukasou.html 、更新日 2026-07-02）。船橋市・柏市は中核市＝保健所設置市として seed/health_center_cities.csv に入っており、千葉市は政令市なので自動で保健所設置市扱いになる。つまり jurisdiction.py の既定（保守点検は保健所設置市なら市、それ以外は県）と実態が一致し、municipalities の例外は要らない。浄化槽工事業（登録・特例届出）は県の権限、清掃業許可は市町村の権限で、どちらも既定どおり。",
+  "電気工事業（electrical）: 千葉県も名簿の一覧公開は無く phone_only。CMPA-3 の神奈川県・CMPA-9 の埼玉県と同じ結論。千葉県は申請窓口自体が千葉県電気工事工業組合で、県のページには手続案内と様式しか無い。",
+  "他市町村の名簿の所在（当たりを付けたもの。千葉市以外はページを開いていない）: 給水装置工事事業者は県営水道区域外の各市町村の水道課（千葉市水道局・四街道市営水道・船橋市水道局など）、排水設備指定工事店は各市町村の下水道担当課、一般廃棄物収集運搬業は各市町村の廃棄物担当課。保健所設置市の船橋市・柏市は浄化槽保守点検業者の名簿も市が持つ（県の名簿からは除かれている）。",
+  "千葉県オープンデータサイト（https://opendata.pref.chiba.lg.jp/ 、利用規約は https://www.pref.chiba.lg.jp/seisaku/toukeidata/opendata/riyoukiyaku.html で CC BY 4.0 互換、リソースのライセンス表示は PDL1.0）には県内市町村のデータも載る。今回の業種で見つかったのは「【千葉県】浄化槽保守点検業者一覧」（データセット388）だけ。解体工事業・浄化槽工事業・県営水道の名簿、千葉市の水道・下水道・一般廃棄物・浄化槽の名簿はポータルには無い（keyword 検索で 解体／浄化槽／給水装置／排水設備／廃棄物／許可業者／工事業者／清掃業 を確認）。市原市・流山市は指定給水装置工事事業者や下水道の指定工事事業者をポータルでオープンデータ公開していて（データセット4841・3426・4843）、他市町村を扱うときの手がかりになる。",
+  "千葉市は別に「ちばDataポータル」（オープンデータカタログ https://www.city.chiba.jp/opendata/ 、利用規約 https://www.city.chiba.jp/somu/joho/kaikaku/chibadataportal_siterule.html ）を持ち、オープンデータは CC ライセンス（出典表記の例は「クリエイティブ・コモンズ・表示2.1」）。ただしカタログの検索が JavaScript 前提でプログラムから引けず、今回の名簿がカタログに登録されているかは未確認。登録されていれば千葉市分は再配布できる可能性があるので、抽出の前に確認する価値がある。",
+  "千葉県・千葉市のどちらもサイトの著作権は「私的使用のための複製」「引用」を除き無断転載お断りで、包括的な再利用の許諾は無い（県 https://www.pref.chiba.lg.jp/homepage/about-site/link.html 、市 https://www.city.chiba.jp/front/link_copyright.html ）。再配布できる根拠があるのは県オープンデータサイト経由の浄化槽保守点検業者一覧（PDL1.0）だけ。他の制度は抽出データをコミットする前にリーダー判断・所管課確認が必要。"
+ ],
+ "prefecture": "12",
+ "authorities": [
+  {
+   "authority_id": "chiba-kigyoukyoku",
+   "name": "千葉県企業局水道部",
+   "level": "water_utility",
+   "parent_id": "pref-12"
+  },
+  {
+   "authority_id": "chiba-suido",
+   "name": "千葉市水道局",
+   "level": "water_utility",
+   "parent_id": "muni-121002"
+  }
+ ],
+ "schemes": [
+  {
+   "scheme_id": "chiba-kigyoukyoku.water",
+   "authority_id": "chiba-kigyoukyoku",
+   "trade": "water",
+   "license_name": "千葉県企業局指定給水装置工事事業者",
+   "validity_years": 5,
+   "publication_format": "full_list_html",
+   "source_url": "https://www.pref.chiba.lg.jp/suidou/kyuusui/shiteikouji/tourokugyousha.html",
+   "contact": "千葉県企業局水道部給水課給水装置班（〒260-8667 千葉市中央区市場町1-1、電話 043-307-1489、FAX 043-307-3193）",
+   "terms_of_use": "千葉県ホームページ「リンク・著作権・プライバシー・免責事項等」（https://www.pref.chiba.lg.jp/homepage/about-site/link.html 、更新日 2023-05-24）。「『私的使用のための複製』や『引用』など著作権法上認められた場合を除き、無断で複製・転用することはできません」とあり、包括的な再利用の許諾は無い。出典表記の要求は書かれていない。千葉県オープンデータサイトにはこの名簿は無い。抽出データをリポジトリに置く前に給水課へ確認が必要（2026-11-01 時点で未確認）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載お断り」で、抽出データの再配布をそのまま行える根拠が無い。給水課の了解を取るか、載せないかをリーダーに判断してもらうこと。"
+    },
+    {
+     "severity": "important",
+     "body": "ファイルのダウンロードは無く、名簿は掲載ページのHTML表（publication_format = full_list_html）。索引ページ（source_url）から6ページに分かれる: /suidou/kyuusui/shiteikouji/meibo-chiba.html（千葉地域）・meibo-toukatsu.html（東葛飾＝船橋・松戸・市川・浦安・鎌ケ谷）・meibo-toukatsu2.html（その他の東葛飾＝野田・流山・柏・我孫子）・meibo-inba.html（印旛）・meibo-sonota-kennai.html（その他の千葉県内）・meibo-sonota-kengai.html（千葉県外）。全件を揃えるには6ページ全部を読む必要がある。"
+    },
+    {
+     "severity": "important",
+     "body": "ページは「事業所の所在地」で分かれていて、事業者の営業区域ではない。索引に「※若葉区・緑区は給水区域外に事業所を構えるものを含む」「船橋市 ※給水区域外に事業所を構えるものを含む」などの注記がある。千葉県外（東京都・神奈川県・埼玉県・茨城県ほか）の事業所も同じ名簿の一部。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意（2026-11-01 に6ページとも開いて確認）: 市区町村ごとに <table> が分かれ、列は 指定番号／事業所名称／事業所住所／事業所電話番号／備考 の5列。備考には業者ごとの「業務内容（PDF）」へのリンク（/suidou/kyuusui/shiteikouji/documents/<指定番号>jigyousya.pdf）が入る。有効期限・代表者名の列は無い。行数（見出し行を除く。自分で数えた数で、原本に件数の記載は無い）は 千葉地域398（中央区57・花見川区48・稲毛区38・若葉区69・緑区40・美浜区16・市原市64・習志野市32・八千代市34）、東葛飾428（船橋168・松戸117・市川86・浦安15・鎌ケ谷42）、その他の東葛飾107、印旛115、その他の千葉県内112、千葉県外327で、合計1,487件。"
+    },
+    {
+     "severity": "important",
+     "body": "基準日は市区町村の表ごとに違う。例えば東葛飾ページは船橋市・市川市・鎌ケ谷市が令和8年9月30日現在、松戸市・浦安市が令和8年9月24日現在で、その他の千葉県内ページには令和6年8月21日現在のまま古い表も混じる。ページ全体の基準日は無いので、表ごとの基準日を拾う必要がある。索引ページの更新日は 2026-09-02、千葉地域・東葛飾ページの更新日は 2026-10-19。"
+    },
+    {
+     "severity": "info",
+     "body": "有効期間5年は水道法の規定。千葉県企業局のページには記載が見当たらないが、千葉市水道局のページに「指定の有効期間が従来の無期限から5年間となります」とある（https://www.city.chiba.jp/suido/jigyo/shiteikoushin.html）。"
+    },
+    {
+     "severity": "info",
+     "body": "県営水道の給水区域は11市で、全域が区域なのは千葉市（若葉区・緑区の一部を除く）・市川市・鎌ケ谷市・浦安市だけ。区域表は https://www.pref.chiba.lg.jp/suidou/souki/suidoukyoku/kyuusuikuiki.html 。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-12.septic-construction",
+   "authority_id": "pref-12",
+   "trade": "septic",
+   "license_name": "千葉県浄化槽工事業登録",
+   "validity_years": 5,
+   "publication_format": "full_list_excel",
+   "source_url": "https://www.pref.chiba.lg.jp/kenchiku/tetsuzuki/joukasou.html",
+   "contact": "千葉県県土整備部建築指導課建築指導室（〒260-8667 千葉市中央区市場町1-1、電話 043-223-3183、FAX 043-225-0913）",
+   "terms_of_use": "千葉県ホームページ「リンク・著作権・プライバシー・免責事項等」（https://www.pref.chiba.lg.jp/homepage/about-site/link.html）。「『私的使用のための複製』や『引用』など著作権法上認められた場合を除き、無断で複製・転用することはできません」とあり、包括的な再利用の許諾は無い。出典表記の要求は書かれていない。千葉県オープンデータサイトにこの名簿は無い。再配布するなら建築指導課の承諾が必要（2026-11-01 時点で未取得）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載お断り」。抽出データを置く前に確認が必要。"
+    },
+    {
+     "severity": "important",
+     "body": "原本に「このリストはあくまで参考資料ですので、登録があることの証明とはなりません」「更新手続がなされず失効となっているもの等が含まれている場合があります」と明記されている。名簿の行＝有効な登録とは限らない扱いで取り込むこと。登録業者の詳細は登録簿の閲覧（1件430円）・謄本交付（1枚680円）で確認する。"
+    },
+    {
+     "severity": "important",
+     "body": "建設業許可（土木工事業・建築工事業・管工事業）を持つ者は「登録」ではなく特例浄化槽工事業の「届出」になり、この名簿には入らない。届出分は pref-12.septic-construction-special（別ファイル）を見ること。浄化槽工事業の登録・届出は「実際に工事を行おうとする区域を管轄する全ての都道府県ごと」に必要なので、千葉県の名簿には他県所在の業者も載る。"
+    },
+    {
+     "severity": "info",
+     "body": "リンク文字は「【千葉県登録】浄化槽工事業者一覧（エクセル：19.5KB）」「同（PDF：361.5KB）」で、href は /kenchiku/tetsuzuki/documents/touroku0831.xlsx と同 .pdf。ファイル名に基準日の月日（0831）が入るので固定できない。基準日は令和8年8月31日時点、ページの更新日は 2026-09-28。更新頻度はページに書かれていない。同じページに特例届出の一覧（tokurei0831.xlsx）と様式・チラシ（joukasoutirashi.pdf）がぶら下がるので、download は href_pattern で区別している。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: シート名は「登録簿」1枚だけ。1〜11行目が表題と注意書きで、見出しは12行目、データは13行目から115行目の103件。列は 登録番号／登録年月日／業者名／代表者職名／代表者氏名／所在地。登録番号は「（登－8）第837号」の形式、登録年月日は日付型。有効期限の列は無く、登録年月日＋5年で出すことになる（有効期間は登録日の翌日から5年間）。"
+    },
+    {
+     "severity": "info",
+     "body": "代表者氏名の列がある。代表者名は照合用途に限り、地図や公開成果物には出さない。"
+    }
+   ],
+   "download": {
+    "href_pattern": "/touroku\\d{4}\\.xlsx$"
+   }
+  },
+  {
+   "scheme_id": "pref-12.septic-construction-special",
+   "authority_id": "pref-12",
+   "trade": "septic",
+   "license_name": "千葉県特例浄化槽工事業届出",
+   "publication_format": "full_list_excel",
+   "source_url": "https://www.pref.chiba.lg.jp/kenchiku/tetsuzuki/joukasou.html",
+   "contact": "千葉県県土整備部建築指導課建築指導室（〒260-8667 千葉市中央区市場町1-1、電話 043-223-3183、FAX 043-225-0913）",
+   "terms_of_use": "pref-12.septic-construction と同じ。千葉県ホームページの著作権（https://www.pref.chiba.lg.jp/homepage/about-site/link.html）で私的使用・引用を除く無断転載はお断りとされ、包括的な再利用の許諾は無い。再配布するなら建築指導課の承諾が必要（2026-11-01 時点で未取得）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "土木工事業・建築工事業・管工事業の建設業許可を持つ者が出す「届出」の名簿で、登録制度（pref-12.septic-construction）とは別。浄化槽工事をやれる業者を全部見るには両方が必要。届出の有効期間は建設業許可を有している間なので validity_years は空にしてある。"
+    },
+    {
+     "severity": "important",
+     "body": "原本の注意書きに「届出の根拠となる建設業許可が有効な期間（5年）を経過しており、かつ、更新後の建設業許可番号及び許可年月日について『特例浄化槽工事業者届出事項変更届出書』の提出がなされていない業者は掲載しておりません」「このリストはあくまで参考資料ですので、届出があることの証明とはなりません」とある。掲載漏れと失効の両方があり得る。"
+    },
+    {
+     "severity": "info",
+     "body": "リンク文字は「【千葉県届出】特例浄化槽工事業者一覧（エクセル：50.6KB）」「同（PDF：239.7KB）」で、href は /kenchiku/tetsuzuki/documents/tokurei0831.xlsx と同 .pdf。基準日は令和8年8月31日時点、ページの更新日は 2026-09-28。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: シート名は「特例届出簿」1枚。1〜15行目が表題と注意書きで、見出しは16行目、データは17行目から458行目の442件。列は 届出番号／届出年月日／業者名／役職／代表者氏名／所在地／建設業許可年月日。届出番号は「(届－8)第1827号」の形式。愛知県など他県所在の業者も載る。代表者名は照合用途に限る。"
+    }
+   ],
+   "download": {
+    "href_pattern": "/tokurei\\d{4}\\.xlsx$"
+   }
+  },
+  {
+   "scheme_id": "pref-12.septic-maintenance",
+   "authority_id": "pref-12",
+   "trade": "septic",
+   "license_name": "千葉県浄化槽保守点検業者登録",
+   "validity_years": 5,
+   "publication_format": "full_list_excel",
+   "source_url": "https://www.pref.chiba.lg.jp/suiho/kasentou/joukasou/tenken.html",
+   "contact": "千葉県環境生活部水質保全課浄化槽班（〒260-8667 千葉市中央区市場町1-1、電話 043-223-3813、FAX 043-222-8044）",
+   "terms_of_use": "（再配布できる経路がある）同じ名簿が千葉県オープンデータサイトの「【千葉県】浄化槽保守点検業者一覧」（https://opendata.pref.chiba.lg.jp/datasets/388 、水質保全課）でも公開され、リソースのライセンス表示は「PDL1.0（公共データ利用規約第1.0版）」。ポータルの利用規約（https://www.pref.chiba.lg.jp/seisaku/toukeidata/opendata/riyoukiyaku.html）はクリエイティブ・コモンズ表示4.0国際（CC BY）と互換で、商用利用も可・出典の記載が必要。一方、source_url の県ページのExcel/PDFには千葉県ホームページの著作権（https://www.pref.chiba.lg.jp/homepage/about-site/link.html 、私的使用・引用を除き無断転載お断り）が及ぶ。再配布するならポータル版（PDL1.0）を原本にして出典表記を付ける。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "原本が2経路ある。県ページ（source_url）のExcelは令和7年12月31日時点で新しいが利用条件が無断転載お断り。千葉県オープンデータサイト（データセット388）は PDL1.0 で再配布できるが、営業所の所在地域ごとに分かれたPDF12本で、データセットの最終更新が 2024-02-19 と2年近く古い。どちらを原本にするかをリーダーに決めてもらうこと。source_url は所管課のページかつ新しい方（県ページ）にしてある。"
+    },
+    {
+     "severity": "important",
+     "body": "原本に「業者一覧については、掲載を希望しない事業者を除いて作成しています」と明記されている。登録業者の全件ではないので、名簿に載っていない＝未登録とは判断できない。"
+    },
+    {
+     "severity": "important",
+     "body": "この名簿は県知事登録の分だけ。千葉市・船橋市・柏市で営業する保守点検業者は各市長の登録で、県の名簿には入らない（データセットの説明も「県内を営業区域としている浄化槽保守点検業者の一覧（千葉市、船橋市及び柏市を除く）」）。千葉市分は muni-121002.septic-maintenance（名簿非公開）を見ること。"
+    },
+    {
+     "severity": "info",
+     "body": "リンク文字は「PDF版（PDF：355.8KB）」「Excel版（エクセル：47.7KB）」で、href は /suiho/kasentou/joukasou/documents/gyousyaitiran.pdf と同 .xlsx。ファイル名に日付が入らないので固定でよい。基準日は令和7年12月31日現在、ページの更新日は 2026-04-09。更新頻度の記載は無く、データセットの作成頻度は「毎年」。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: シート名は「保守点検業者一覧（R7.12.31時点）」。1〜4行目が表題と注意書き、見出しは5行目、データは6行目から423行目の418件。列は 登録番号（A）／事業所名（B、営業所名がC）／営業所所在地（D〜H: 都道府県・市区町村・町名・番地・建物名の5列に分割）／電話番号（I）。見出しは結合セルなので列位置で読むことになる。登録番号は「水保第57号」「海地振第13号」のように登録窓口（水質保全課・各地域振興事務所）ごとの採番で、全県通し番号ではない。事業所名は「㈲」「ｾﾝﾀｰ」など半角カナ・組文字が混じる。有効期限・代表者名の列は無く、登録年月日の列も無いので、登録日＋5年の有効期限は原本から出せない。東京都所在の営業所も載る。"
+    },
+    {
+     "severity": "info",
+     "body": "登録期限は登録日から5年（https://www.pref.chiba.lg.jp/suiho/tetsuzuki/joukasou.html 、更新日 2026-07-02）。登録申請の窓口は営業する市町村ごとに違い、水質保全課（千葉市・市原市・県外・2つ以上の地域振興事務所の区域）と9つの地域振興事務所に分かれる。"
+    }
+   ],
+   "download": {
+    "href_pattern": "/gyousyaitiran\\.xlsx$"
+   }
+  },
+  {
+   "scheme_id": "pref-12.demolition",
+   "authority_id": "pref-12",
+   "trade": "demolition",
+   "license_name": "千葉県解体工事業登録",
+   "validity_years": 5,
+   "publication_format": "full_list_excel",
+   "source_url": "https://www.pref.chiba.lg.jp/gikan/jigyousha/recycle/recycle/touroku.html",
+   "contact": "千葉県県土整備部技術管理課建設リサイクル推進班（〒260-8667 千葉市中央区市場町1番1号 県庁中庁舎5階、電話 043-223-3440、FAX 043-227-1075）",
+   "terms_of_use": "千葉県ホームページ「リンク・著作権・プライバシー・免責事項等」（https://www.pref.chiba.lg.jp/homepage/about-site/link.html）。「『私的使用のための複製』や『引用』など著作権法上認められた場合を除き、無断で複製・転用することはできません」とあり、包括的な再利用の許諾は無い。出典表記の要求は書かれていない。千葉県オープンデータサイトにこの名簿は無い。再配布するなら技術管理課の承諾が必要（2026-11-01 時点で未取得）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載お断り」。抽出データを置く前に確認が必要。"
+    },
+    {
+     "severity": "info",
+     "body": "名簿は3本並ぶ: 【全体版】エクセル（990.5KB、/gikan/jigyousha/recycle/recycle/documents/tourokuitiran-r0810.xlsx）、【全体版】PDF（871.5KB、同 .pdf）、【概要版】PDF（714.5KB、tourokugaiyou-r0810.pdf）。全体版は「各登録業者の情報を登録簿形式で閲覧することができますが、旧漢字等が文字化けする場合があります」とあり、列が揃うエクセルの全体版を取る。ファイル名に和暦の年月（r0810）が入るので固定できない。基準日は令和8年10月15日現在、ページの更新日は 2026-10-20、更新頻度は「毎月一度更新します」。"
+    },
+    {
+     "severity": "important",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: シートは「千葉県解体工事業者一覧」と「個別登録簿（A列の番号を入力してください）」の2枚で、名簿は前者。見出しは2行目、データは3行目から1421行目の1,419件（申請者名が入っている行を数えた。原本に件数の記載は無い）。max_row は2937まであるが後半は空行なので、申請者名が空の行で打ち切る必要がある。列は81列で、登録番号に当たるのはA列（数値）と B列 登録年度／C列 登録順（'０００７' のような全角ゼロ詰め文字列）。以降 登録年月日／有効期間満了年月日／申請者名／フリガナ／郵便番号／都道府県／住所１／住所２／電話番号／役員1〜8の氏名・フリガナ・役名／技術管理者1〜4氏名／営業所1〜8（名称・フリガナ・住所・郵便番号・電話番号）。1件が複数営業所を持つ横長の形。"
+    },
+    {
+     "severity": "info",
+     "body": "有効期間満了年月日の列があり、登録年月日＋5年になっている（例: 2026-06-29 登録 → 2031-06-29 満了）。日付は日付型、郵便番号は '2600001' のような文字列。氏名・住所に全角スペースと旧漢字（私用領域の文字）が混じる（例: '髙\\ue003興業'）。都道府県の内訳は 千葉県532・埼玉県488・東京都285・神奈川県51・茨城県46・群馬県6・栃木県2・大阪府2 ほかで、県外業者が過半。"
+    },
+    {
+     "severity": "info",
+     "body": "役員氏名・技術管理者氏名の列がある。代表者名は照合用途に限り、地図や公開成果物には出さない。"
+    },
+    {
+     "severity": "info",
+     "body": "建設業許可（土木工事業・建築工事業・解体工事業）があれば解体工事業登録は不要。解体工事業登録で請け負えるのは軽微な工事（請負代金500万円未満、建築一式は1,500万円未満）のみ。"
+    }
+   ],
+   "download": {
+    "href_pattern": "/tourokuitiran-r\\d{4}\\.xlsx$"
+   }
+  },
+  {
+   "scheme_id": "pref-12.electrical",
+   "authority_id": "pref-12",
+   "trade": "electrical",
+   "license_name": "千葉県登録電気工事業者",
+   "validity_years": 5,
+   "publication_format": "phone_only",
+   "source_url": "https://www.pref.chiba.lg.jp/hoan/tetsuzuki/shigoto-sangyou/shoukougyou/denkikouji.html",
+   "contact": "千葉県防災危機管理部産業保安課管理調整班（〒260-8667 千葉市中央区市場町1-1、電話 043-223-2722、FAX 043-227-3548）",
+   "terms_of_use": "名簿の公開なし。登録簿の謄本交付・閲覧は有料で、産業保安課管理調整室に「登録電気工事業者登録簿謄本交付（閲覧）請求書」を出して請求する（謄本交付1枚600円、閲覧1回440円、千葉県収入証紙。標準処理期間10日間。https://www.pref.chiba.lg.jp/hoan/tetsuzuki/170/05100-191.html 、更新日 2026-09-11）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "登録電気工事業者の名簿は一覧として公開されていない。この制度は地図に出せない。県のページにあるのは手続の種類（登録／みなし登録／通知／みなし通知）の説明と様式だけ。CMPA-3 の神奈川県・CMPA-9 の埼玉県と同じ結論で、1件ずつ有料で照会するしかない。"
+    },
+    {
+     "severity": "important",
+     "body": "千葉県では電気工事業法の申請窓口自体が業界団体に委託されている。「千葉県内のみに営業所がある方の、電気工事業法に係る申請先は、千葉県電気工事工業組合となります」（〒260-0005 千葉市中央区道場南1丁目9番15号、電話 043-224-6086）。ただし登録簿の謄本交付・閲覧の請求先は県の産業保安課。"
+    },
+    {
+     "severity": "info",
+     "body": "登録の有効期間は5年（「登録の有効期間は5年間となりますので、5年ごとに更新登録をする必要があります」）。謄本交付・閲覧の請求ができるのは登録電気工事業者だけで、みなし登録電気工事業者（建設業許可を持つ届出事業者）については請求できない。複数都道府県に営業所がある場合は経済産業大臣／産業保安監督部の登録で meti.electrical を参照。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "pref-12.construction",
+   "authority_id": "pref-12",
+   "trade": "construction",
+   "license_name": "千葉県知事 建設業許可",
+   "validity_years": 5,
+   "publication_format": "search_system",
+   "source_url": "https://etsuran2.mlit.go.jp/TAKKEN/kensetuKensaku.do",
+   "contact": "千葉県県土整備部建設・不動産業課建設業班（〒260-8667 千葉市中央区市場町1-1、電話 043-223-3108、FAX 043-225-4012）",
+   "terms_of_use": "国土交通省のサイトポリシー（https://www.mlit.go.jp/link.html）。公共データ利用規約（PDL1.0）に準拠した条件で、出典の記載が必要。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "info",
+     "body": "照合は CMPA-7 の SearchSystemClient（国交省 建設業者・宅建業者等企業情報検索システム）で1件ずつ問い合わせる。名簿の取得はしない。"
+    },
+    {
+     "severity": "info",
+     "body": "許可の有効期間は5年（「許可の有効期間は,5年間です」。期間満了の30日前までに更新手続が必要）。請負代金500万円以上（建築一式は1,500万円以上または延べ面積150平方メートル以上の木造住宅）の工事に必要。2以上の都道府県に営業所を置く場合は国土交通大臣許可（mlit.construction）。"
+    },
+    {
+     "severity": "info",
+     "body": "申請・相談の窓口は本店所在地を管轄する土木事務所（千葉土木事務所＝千葉市・習志野市・八千代市 043-242-6101、葛南＝市川市・船橋市・浦安市 047-433-2421 など15か所。一覧は https://www.pref.chiba.lg.jp/kenfudou/jigyousha/kensetsu/kyoka.html 、更新日 2025-06-25）。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "chiba-suido.water",
+   "authority_id": "chiba-suido",
+   "trade": "water",
+   "license_name": "千葉市指定給水装置工事事業者",
+   "validity_years": 5,
+   "publication_format": "full_list_html",
+   "source_url": "https://www.city.chiba.jp/suido/jigyo/siteimeibotop.html",
+   "contact": "千葉市水道局水道事業事務所（〒266-0005 千葉市緑区平川町2210番地、電話 043-291-5462、FAX 043-291-8404、jigyo.WA@city.chiba.lg.jp）",
+   "terms_of_use": "千葉市ホームページ「リンク・著作権・免責事項」（https://www.city.chiba.jp/front/link_copyright.html）。「『私的使用のための複製』や『引用』など著作権法上認められた場合を除き、無断で複製・転用することはできません。ただし、千葉市ホームページ内の各ページに特段の定めがある場合には、その取り扱いが優先されます」とあり、水道局のこのページに別の定めは見当たらない。出典表記の要求も書かれていない。千葉市のオープンデータ（ちばDataポータル）に登録されていれば CC ライセンスで扱えるが、カタログ検索がJavaScript前提で未確認。抽出データをリポジトリに置く前に水道事業事務所へ確認が必要（2026-11-01 時点で未確認）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載禁止」で、抽出データの再配布をそのまま行える根拠が無い。水道事業事務所の了解を取るか、載せないかをリーダーに判断してもらうこと。"
+    },
+    {
+     "severity": "important",
+     "body": "ファイルのダウンロードは無く、名簿は掲載ページのHTML表（publication_format = full_list_html）。索引（source_url）から7ページに分かれる: /suido/jigyo/siteimeibo1.html（千葉市内6区）・siteimeibo2_1.html（千葉市隣接市町村1）・siteimeibo2_2.html（同2）・siteimeibo3_1.html〜3_3.html（その他県内1〜3）・siteimeibo4.html（県外）。全件を揃えるには7ページ全部を読む必要がある。"
+    },
+    {
+     "severity": "important",
+     "body": "ページごとに更新日が違い、古いものが混じる（2026-11-01 時点: siteimeibo1=2026-08-24、2_1=2025-10-21、2_2=2025-08-27、3_1=2026-03-04、3_2=2026-07-15、3_3=2026-09-14、4=2026-07-16、索引=2025-08-27）。基準日の表示は無く、ページの更新日しか手がかりが無い。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意（2026-11-01 に7ページとも開いて確認）: 市区町村ごとに <table> が分かれ、列は 指定番号／氏名又は名称／〒／住所／TEL の5列。住所の列に市区町村名が入らない表があるので、見出し（区名・市町村名）を補う必要がある。有効期限・代表者名の列は無い。行数（見出し行を除く。自分で数えた数で、原本に件数の記載は無い）は 市内146（中央区32・花見川区17・稲毛区21・若葉区41・緑区29・美浜区6）、隣接市町村1=81、隣接市町村2=8、その他県内1=27・2=40・3=16、県外61で、合計379件。"
+    },
+    {
+     "severity": "important",
+     "body": "千葉市の給水は3事業体に分かれる。ページに「千葉市は千葉市営水道、千葉県営水道、四街道市営水道の3事業体から給水しております」とあり、この名簿は千葉市水道局の指定分だけ。中央区・稲毛区・花見川区・美浜区の全域と若葉区・緑区の一部は千葉県営水道（chiba-kigyoukyoku.water）で、若葉区の一部は四街道市営水道。住所から事業体を決めるには区域表（市 https://www.city.chiba.jp/suido/somu/kyuukui-kuiki-wakaba.html 、県 https://www.pref.chiba.lg.jp/suidou/souki/suidoukyoku/kyuusuikuiki.html ）が必要。"
+    },
+    {
+     "severity": "info",
+     "body": "有効期間5年の根拠は「指定給水装置工事事業者の指定更新について」（https://www.city.chiba.jp/suido/jigyo/shiteikoushin.html）の「指定の有効期間が従来の無期限から5年間となります」。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "muni-121002.sewer",
+   "authority_id": "muni-121002",
+   "trade": "sewer",
+   "license_name": "千葉市指定排水設備工事業者",
+   "validity_years": 5,
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.city.chiba.jp/kensetsu/gesuidokikaku/eigyo/koujiten_meibo_index.html",
+   "contact": "千葉市建設局下水道企画部下水道営業課（〒260-8722 千葉市中央区千葉港1番1号 千葉市役所低層棟3階、電話 043-245-5412、FAX 043-245-5563、eigyo.COP@city.chiba.lg.jp）",
+   "terms_of_use": "千葉市ホームページ「リンク・著作権・免責事項」（https://www.city.chiba.jp/front/link_copyright.html）。私的使用・引用を除き無断で複製・転用はできないとされ、包括的な再利用の許諾は無い。出典表記の要求も書かれていない。抽出データをリポジトリに置く前に下水道営業課へ確認が必要（2026-11-01 時点で未確認）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載禁止」。抽出データを置く前に確認が必要。"
+    },
+    {
+     "severity": "info",
+     "body": "名簿は1本だけ。リンク文字は「千葉市指定排水設備工事業者名簿（市・郡別）（PDF：746KB）」、href は /kensetsu/gesuidokikaku/eigyo/documents/meibosigunnbetu_1.pdf（ファイル名に日付は入らない）。基準日は令和8年6月30日、ページの更新日は 2026-07-13。更新頻度は「指定を随時行なっております」で定期更新ではなく、原本にも「皆様が実際に工事を発注する際には、この他にも新しい工事業者が指定されている場合があります」と書かれている。"
+    },
+    {
+     "severity": "important",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: 全15ページ。1ページ目は表題（千葉市指定排水設備工事業者名簿（市・郡別）／千葉市建設局下水道企画部下水道営業課／令和8年6月30日）、2ページ目は市区郡の索引と注記、名簿は3ページ目から。列は 番号／指定番号／事業所名／所在地／電話番号。「番号」は市区郡のセクションごとに1から振り直すので一意ではなく、一意なのは指定番号。所在地は「千葉市中央区 塩田町826-6」のように市区町村と以降が1つのセルに入る。有効期限・代表者名の列は無い。"
+    },
+    {
+     "severity": "important",
+     "body": "原本に件数の記載は無い。2026-11-01 に行単位で数えたところ475件（千葉市内190＝中央区37・花見川区29・稲毛区23・若葉区62・緑区30・美浜区9、市外285）だが、事業所名が2行に折り返す行があり取りこぼしの可能性がある。抽出時に数え直して突き合わせること。"
+    },
+    {
+     "severity": "info",
+     "body": "指定の有効期限は5年（https://www.city.chiba.jp/kensetsu/gesuidokikaku/eigyo/koujiten_renewal.html 「指定排水設備工事業者の有効期限は5年です」、更新日 2026-04-21）。更新は期限前に下水道営業課から通知が来て、受付期間がまとめて設定される（令和8年は1月5日〜2月2日）。"
+    },
+    {
+     "severity": "info",
+     "body": "区ごとの問い合わせ先は2ページ目の注記にある（下水道営業課 043-245-5412）。市外の事業所も同じ名簿に入る。"
+    }
+   ],
+   "download": {
+    "href_pattern": "/meibosigunnbetu[_0-9]*\\.pdf$"
+   }
+  },
+  {
+   "scheme_id": "muni-121002.waste",
+   "authority_id": "muni-121002",
+   "trade": "waste",
+   "license_name": "千葉市一般廃棄物収集運搬業許可",
+   "publication_format": "full_list_html",
+   "source_url": "https://www.city.chiba.jp/kankyo/junkan/sangyohaikibutsu/kyokagyosya.html",
+   "contact": "千葉市環境局資源循環部産業廃棄物指導課（〒260-8722 千葉市中央区千葉港1番1号 千葉市役所高層棟7階、電話 043-245-5248）",
+   "terms_of_use": "千葉市ホームページ「リンク・著作権・免責事項」（https://www.city.chiba.jp/front/link_copyright.html）。私的使用・引用を除き無断で複製・転用はできないとされ、包括的な再利用の許諾は無い。出典表記の要求も書かれていない。抽出データをリポジトリに置く前に産業廃棄物指導課へ確認が必要（2026-11-01 時点で未確認）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載禁止」。抽出データを置く前に確認が必要。"
+    },
+    {
+     "severity": "important",
+     "body": "家庭の引越し・遺品整理で出る一時多量ごみも、この一般廃棄物処理業許可業者に依頼する扱い（https://www.city.chiba.jp/kankyo/junkan/shushugyomu/hikkoshigomi.html 「引越し・遺品整理などで一時的に多量に出るごみは、ごみステーションには出せません。千葉市一般廃棄物処理業許可業者に引き取りを依頼する」）。川崎市・さいたま市のように名簿上で「一時多量ごみ」の区分が分かれているわけではないので required_sub_scope は付けていない。業者の紹介窓口として千葉市廃棄物リサイクル事業協同組合（電話 043-204-5805）が案内されている。"
+    },
+    {
+     "severity": "important",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: ファイルのダウンロードは無く、掲載ページのHTML表（publication_format = full_list_html）。表は2つで、「一般廃棄物収集運搬業許可業者一覧表（市外局番043）」32件（列: 業者名／所在地／電話番号）と「一般廃棄物処分業許可業者一覧表（市外局番043）」8件（列: 取扱品目／業者名／所在地／電話番号）。収集運搬業の方を取る。許可番号の列が無いので licensee.license_no に入れられる番号が原本に無い。空にできないなら別の採番をどうするか、リーダーに確認してから抽出すること。"
+    },
+    {
+     "severity": "important",
+     "body": "抽出時の注意: 電話番号は市外局番043が表の見出しに出ていて各行は「209-5100」のように局番なし。所在地も「中央区宮崎町」のように町名までで番地が無く、ジオコーディングは町名止まりになる。業者名には外部サイトへのリンクが付く。"
+    },
+    {
+     "severity": "info",
+     "body": "基準日は令和8年4月1日現在、ページの更新日は 2026-04-17。更新頻度の記載は無い。許可の有効期間もページに書かれていないので validity_years は空にしてある。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "muni-121002.septic-cleaning",
+   "authority_id": "muni-121002",
+   "trade": "septic",
+   "license_name": "千葉市浄化槽清掃業許可",
+   "publication_format": "full_list_html",
+   "source_url": "https://www.city.chiba.jp/kankyo/junkan/shushugyomu/js_ijikanri_top.html",
+   "contact": "千葉市環境局資源循環部収集業務課（〒260-8722 千葉市中央区千葉港1番1号 千葉市役所高層棟7階、電話 043-245-5251、浄化槽班 043-245-5252）",
+   "terms_of_use": "千葉市ホームページ「リンク・著作権・免責事項」（https://www.city.chiba.jp/front/link_copyright.html）。私的使用・引用を除き無断で複製・転用はできないとされ、包括的な再利用の許諾は無い。出典表記の要求も書かれていない。抽出データをリポジトリに置く前に収集業務課へ確認が必要（2026-11-01 時点で未確認）。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "利用条件が「無断転載禁止」。抽出データを置く前に確認が必要。"
+    },
+    {
+     "severity": "important",
+     "body": "浄化槽の清掃は「千葉市長の許可を受けた清掃業者」が行う。保守点検（市の登録、muni-121002.septic-maintenance）とは別の制度なので scheme を分けている。清掃回数は年1回以上（浄化槽法第10条第1項。6か月に1回必要な型もある）。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出時の注意（2026-11-01 に原本を開いて確認）: ファイルのダウンロードは無く、掲載ページのHTML表（publication_format = full_list_html）。ページには法定検査料金・保守点検回数などの表も並び、業者一覧は「3.浄化槽の清掃を年1回以上行いましょう」の節にある4番目の表（列: 事業者／所在地／電話番号、8件）。許可番号・有効期限・代表者名の列は無い。所在地は「千葉市稲毛区宮野木町441-12」まで入っている。"
+    },
+    {
+     "severity": "info",
+     "body": "基準日の記載は無く、ページの更新日は 2026-09-18。許可の有効期間も書かれていないので validity_years は空にしてある。法定検査・保守点検・清掃をまとめて契約する「一括契約制度」の案内があり、申込先は市に登録した保守点検業者または市が許可した清掃業者。"
+    }
+   ]
+  },
+  {
+   "scheme_id": "muni-121002.septic-maintenance",
+   "authority_id": "muni-121002",
+   "trade": "septic",
+   "license_name": "千葉市浄化槽保守点検業者登録",
+   "validity_years": 5,
+   "publication_format": "phone_only",
+   "source_url": "https://www.city.chiba.jp/kankyo/junkan/shushugyomu/js_hoshutenken_top.html",
+   "contact": "千葉市環境局資源循環部収集業務課浄化槽班（〒260-8722 千葉市中央区千葉港1番1号 千葉市役所高層棟7階、電話 043-245-5252）",
+   "terms_of_use": "名簿の公開なし。市のページは登録を受ける側向けの手続案内（新規30,000円・更新28,000円、様式9種）だけで、登録業者の一覧は載っていない。問い合わせ先として一般社団法人千葉県環境保全センター（電話 043-245-4222）が案内されている。",
+   "verified_at": "2026-11-01",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "千葉市内で浄化槽保守点検業を営むには千葉市長の登録が必要（県知事登録の対象は千葉市・船橋市・柏市を除く県内市町村）。しかし千葉市は登録業者の名簿を公開していない。維持管理のページには「市に登録している保守点検業者に依頼してください。※浄化槽保守点検業者については一般社団法人千葉県環境保全センター（電話番号：043-245-4222）へお問い合わせください。」とあり、照会は電話のみ。この制度は地図に出せない。"
+    },
+    {
+     "severity": "info",
+     "body": "登録の有効期間は5年（登録日の翌日から5年間）。ページの更新日は 2026-09-18。千葉市分は県の名簿（pref-12.septic-maintenance）にも入らないので、千葉市の保守点検業者は現時点ではどこからも一覧で取れない。"
+    }
+   ]
+  }
+ ],
+ "municipalities": {
+  "千葉市": {
+   "jurisdiction": {
+    "water": [
+     "chiba-suido",
+     "chiba-kigyoukyoku"
+    ]
+   }
+  },
+  "市川市": {
+   "jurisdiction": {
+    "water": [
+     "chiba-kigyoukyoku"
+    ]
+   }
+  },
+  "鎌ヶ谷市": {
+   "jurisdiction": {
+    "water": [
+     "chiba-kigyoukyoku"
+    ]
+   }
+  },
+  "浦安市": {
+   "jurisdiction": {
+    "water": [
+     "chiba-kigyoukyoku"
+    ]
+   }
+  }
+ },
+ "overrides": []
+}
