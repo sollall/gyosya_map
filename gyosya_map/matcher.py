@@ -26,7 +26,10 @@ NO_SCHEME = "制度なし"
 class SearchSystemClient(Protocol):
     """検索システム型の制度（国交省 建設業者検索など）を照会時に問い合わせる。
 
-    見つかった行を licensee と同じ形の dict で返す。問い合わせられなければ None。
+    見つかった行を licensee と同じ形の dict で返す（該当なしは空リスト）。
+    問い合わせられなければ None を返し、理由を `last_error` に入れる（任意）。
+    該当なしと問い合わせ失敗を混ぜないこと。失敗のときは名簿を確かめられていないので、
+    「名簿に見当たらない」ではなく判定不能になる。
     """
 
     def lookup(self, scheme: sqlite3.Row, license_no: str | None, name: str | None) -> list[dict] | None: ...
@@ -99,12 +102,13 @@ def _license_label(license_no: str) -> str:
     return license_no if ("第" in license_no or "号" in license_no) else f"第{license_no}号"
 
 
-def _completeness(conn: sqlite3.Connection, scheme: sqlite3.Row, has_client: bool) -> str:
+def _completeness(conn: sqlite3.Connection, scheme: sqlite3.Row, live: dict[str, list[dict] | None]) -> str:
     fmt = scheme["publication_format"]
     if fmt in ("full_list_excel", "full_list_pdf"):
         return "high" if roster_fetched_at(conn, scheme["scheme_id"]) else "none"
     if fmt == "search_system":
-        return "high" if has_client else "none"
+        # 問い合わせが失敗した（None）ときは確かめられていないので完全性は none
+        return "high" if isinstance(live.get(scheme["scheme_id"]), list) else "none"
     if fmt == "notice_diff":
         return "low"
     return "none"   # phone_only / 未調査
@@ -195,13 +199,28 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
         result.message = f"{loc.municipality}の{t.label}の制度情報はまだ整備されていません。"
         return result
 
+    # 3. 検索システム型は照会時に問い合わせる（該当なし＝空リスト、問い合わせ失敗＝None）
+    live: dict[str, list[dict] | None] = {}
+    failures: dict[str, str | None] = {}
+    if search_client:
+        for s in local:
+            if s["publication_format"] == "search_system":
+                found = search_client.lookup(s, license_no, name)
+                live[s["scheme_id"]] = found
+                if found is None:
+                    failures[s["scheme_id"]] = getattr(search_client, "last_error", None)
+
     for s in local:
         fetched = roster_fetched_at(conn, s["scheme_id"])
         result.schemes.append(SchemeInfo(
             authority=s["authority_name"], license_name=s["license_name"],
             publication_format=s["publication_format"],
-            completeness=_completeness(conn, s, search_client is not None),
+            completeness=_completeness(conn, s, live),
             contact=s["contact"], source_url=s["source_url"], fetched_at=fetched and fetched.isoformat()))
+        if s["scheme_id"] in failures:
+            reason = failures[s["scheme_id"]]
+            result.warnings.append(f"{s['license_name']}は検索システムに問い合わせできませんでした"
+                                   + (f"（{reason}）" if reason else "") + "。")
         if is_stale(fetched, today):
             result.warnings.append(f"{s['license_name']}の名簿は取得から90日を超えています。"
                                    f"情報が古い可能性があります（取得日: {fetched.isoformat()}）。")
@@ -209,20 +228,14 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
                               "ORDER BY severity = 'important' DESC, note_id", (s["scheme_id"],)):
             result.notes.append({"severity": n["severity"], "body": n["body"]})
 
-    # 3. 番号 → 商号 の順で該当機関の名簿を探す（検索システム型は照会時に問い合わせる）
+    # 番号 → 商号 の順で該当機関の名簿を探し、検索システムで見つかった行を足す
     hits = list(_find(conn, [s["scheme_id"] for s in local], license_no, name, business_address))
-    searched_live = set()
-    if search_client:
-        for s in local:
-            if s["publication_format"] == "search_system":
-                found = search_client.lookup(s, license_no, name)
-                if found is not None:
-                    searched_live.add(s["scheme_id"])
-                    for f in found:
-                        hits.append({"authority_name": s["authority_name"], "license_name": s["license_name"],
-                                     "required_sub_scope": s["required_sub_scope"], "source_url": s["source_url"],
-                                     "fetched_at": today.isoformat(), "needs_review": 0, "address": None,
-                                     "sub_scope": None, "valid_until": None, "status": "active", **f})
+    for s in local:
+        for f in live.get(s["scheme_id"]) or []:
+            hits.append({"authority_name": s["authority_name"], "license_name": s["license_name"],
+                         "required_sub_scope": s["required_sub_scope"], "source_url": s["source_url"],
+                         "fetched_at": today.isoformat(), "needs_review": 0, "address": None,
+                         "sub_scope": None, "valid_until": None, "status": "active", **f})
     if any(r["needs_review"] for r in hits):
         result.warnings.append("検品（目視確認）が済んでいない抽出行を含みます。"
                                "根拠の行に「未検品」と付けた行は、原本と一致しているか確かめていません。")
@@ -277,13 +290,16 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
         result.message = "名簿に見当たらない。担当課に確認を推奨"
     else:
         result.verdict = UNDETERMINED
+        failed_names = {s["license_name"] for s in local if s["scheme_id"] in failures}
         lacking = [s for s in result.schemes if s.completeness != "high"]
         reasons = []
         for s in lacking:
             if s.publication_format == "notice_diff":
                 reasons.append(f"{s.license_name}は告示の差分しか公開されておらず、名簿が不完全")
             elif s.publication_format == "search_system":
-                reasons.append(f"{s.license_name}は検索システムでの確認が必要")
+                reasons.append(f"{s.license_name}は検索システムに問い合わせできなかった"
+                               if s.license_name in failed_names
+                               else f"{s.license_name}は検索システムでの確認が必要")
             elif s.publication_format in ("full_list_excel", "full_list_pdf"):
                 reasons.append(f"{s.license_name}の名簿が未取得")
             elif s.publication_format == "phone_only":

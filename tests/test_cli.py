@@ -15,6 +15,27 @@ def test_cli_end_to_end(tmp_path, capsys):
     assert main(["--db", dbp, "check", "--address", "府中市1", "--trade", "water", "--name", "x"]) == 2
 
 
+def test_cli_check_search_queries_the_search_system(tmp_path, monkeypatch, capsys):
+    """--search で検索システムに問い合わせ、結果の内訳を stderr に出す。"""
+    from test_search_system import KANAGAWA, FakeSystem
+
+    from gyosya_map import search_system
+
+    monkeypatch.setattr(search_system, "HttpTransport", lambda: FakeSystem([KANAGAWA]))
+    dbp = str(tmp_path / "g.db")
+    main(["--db", dbp, "init"])
+    capsys.readouterr()
+    assert main(["--db", dbp, "check", "--address", "川崎市幸区1", "--trade", "reform",
+                 "--name", "株式会社見本建設"]) == 0
+    assert capsys.readouterr().out.startswith("【判定不能】")     # --search なしでは問い合わせない
+    assert main(["--db", dbp, "check", "--address", "川崎市幸区1", "--trade", "reform",
+                 "--name", "株式会社見本建設", "--search"]) == 0
+    captured = capsys.readouterr()
+    assert captured.out.startswith("【公認あり】神奈川県の神奈川県知事 建設業許可あり")
+    assert "pref-14.construction found（1 件" in captured.err
+    assert "mlit.construction not_found" in captured.err
+
+
 def test_cli_missing_file_is_a_clear_error(tmp_path):
     import pytest
 

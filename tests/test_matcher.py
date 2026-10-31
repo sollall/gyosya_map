@@ -95,6 +95,22 @@ def test_demolition_requires_both_sources_to_conclude(conn):
     assert r.verdict == AUTHORIZED
 
 
+def test_search_system_failure_is_not_a_complete_roster(conn):
+    """問い合わせ失敗（None）を「名簿に見当たらない」にしない。"""
+
+    class Broken:
+        last_error = "検索システムに接続できません: timed out"
+
+        def lookup(self, scheme, license_no, name):
+            return None
+
+    r = check(conn, address=KAWASAKI, trade="reform", name="建設許可工務店", today=TODAY, search_client=Broken())
+    assert r.verdict == UNDETERMINED
+    assert all(s.completeness == "none" for s in r.schemes)
+    assert any("timed out" in w for w in r.warnings)
+    assert "問い合わせできなかった" in r.message
+
+
 def test_waste_sub_scope(conn):
     conn.execute("UPDATE scheme SET publication_format = 'full_list_pdf' WHERE scheme_id = 'muni-141305.waste'")
     _full(conn, "muni-141305.waste", [
