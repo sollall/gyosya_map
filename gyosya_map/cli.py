@@ -1,6 +1,7 @@
 """コマンドライン。
 
   uv run gyosya-map init                                  # DB作成＋制度・管轄データ投入
+  uv run gyosya-map import-extract --dir data_extracts/<制度ID>/<日付>/  # 抽出データの取り込み（推奨）
   uv run gyosya-map import  --scheme ID --file 名簿.xlsx   # 全件名簿（xlsx / pdf / csv）
   uv run gyosya-map notice  --scheme ID --file 告示.pdf --date 2026-09-30
   uv run gyosya-map preview --scheme ID --file 名簿.xlsx   # 取り込まずに読み取り結果を確認
@@ -19,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import db, freshness
+from . import db, extracts, freshness
 from .ingest import ParserConfig, apply_notice_events, import_full_list, load_for_scheme, parse_file, store_document
 from .matcher import check
 from .normalize import parse_date
@@ -78,6 +79,15 @@ def main(argv: list[str] | None = None) -> int:
         if name == "notice":
             sp.add_argument("--date", help="告示日（省略時は告示PDFから読み取る）")
 
+    sp = sub.add_parser("import-extract", help="エージェントが作った正規化済み抽出データ（data_extracts/）を取り込む")
+    g = sp.add_mutually_exclusive_group(required=True)
+    g.add_argument("--dir", help="抽出データのディレクトリ（manifest.json と rows.jsonl がある）")
+    g.add_argument("--all", action="store_true", help="--extracts-dir 配下の全件を古い順に取り込む")
+    sp.add_argument("--scheme", help="制度ID（--dir のとき manifest と一致するか確かめる）")
+    sp.add_argument("--extracts-dir", default=extracts.EXTRACTS_DIR, help="--all で抽出データを探す場所")
+    sp.add_argument("--allow-count-mismatch", action="store_true",
+                    help="原本の件数（source_row_count）と rows.jsonl の行数の不一致を警告だけにする")
+
     sp = sub.add_parser("check", help="照合")
     sp.add_argument("--address", required=True, help="工事・依頼をする場所の住所")
     sp.add_argument("--trade", required=True, help="業種（water, sewer, waste, septic, electrical, demolition, reform …）")
@@ -102,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--scheme", action="append", help="制度ID（複数指定可）")
     sp.add_argument("--trade", help="業種で絞る")
     sp.add_argument("--title", default="業者公認マップ")
+    sp.add_argument("--include-unreviewed", action="store_true",
+                    help="検品（目視確認）が済んでいない行も出す（既定では出さない）")
 
     sp = sub.add_parser("inspect", help="PDF・Excelから読み取れる文字と表をそのまま表示する（読み込み設定を作るため）")
     sp.add_argument("--file", required=True)
@@ -162,6 +174,8 @@ def _run(a, conn) -> int:
                                         fetched_at=fetched)
         conn.commit()
         print(json.dumps({"records": len(records), **stats}, ensure_ascii=False))
+    elif a.cmd == "import-extract":
+        return _import_extract(conn, a)
     elif a.cmd == "fetch":
         return _fetch(conn, a)
     elif a.cmd == "inspect":
@@ -190,13 +204,20 @@ def _run(a, conn) -> int:
         from . import geo, mapview
         if not geo.has_towns(conn):
             raise SystemExit("町丁目の座標がまだありません。先に `uv run gyosya-map geo-update` を実行してください。")
-        points, stats = mapview.collect(conn, schemes=a.scheme, trade=a.trade)
-        cov = mapview.coverage(conn, a.trade)
+        points, stats = mapview.collect(conn, schemes=a.scheme, trade=a.trade,
+                                        include_unreviewed=a.include_unreviewed)
+        cov = mapview.coverage(conn, a.trade, include_unreviewed=a.include_unreviewed)
         out = mapview.write_map(points, stats, a.out, a.title, cov)
         print(f"{out} に有効な登録業者 {stats.plotted} 件をプロットしました（所在地なし {stats.no_address} 件、"
               f"位置が分からない住所 {len(stats.not_found)} 件）")
+        if stats.unreviewed:
+            print(f"  検品前の行 {stats.unreviewed} 件を" +
+                  ("含めました（--include-unreviewed）" if a.include_unreviewed else
+                   "除きました（--include-unreviewed で含められます）"))
         for c in cov:
             state = f"{c['active']} 件" if c["fetched_at"] else "名簿未取り込み"
+            if c["unreviewed"] and not a.include_unreviewed:
+                state += f"（検品待ち {c['unreviewed']} 件を除く）"
             print(f"  {mapview.TRADE_STYLE[c['trade']][0]}\t{c['license_name']}\t{state}")
         for addr in stats.not_found[:10]:
             print(f"  位置が分からない: {addr}", file=sys.stderr)
@@ -214,6 +235,31 @@ def _run(a, conn) -> int:
         for s in conn.execute("SELECT s.scheme_id, s.trade, s.license_name, s.publication_format, r.fetched_at "
                               "FROM scheme s LEFT JOIN roster_fetch r USING (scheme_id) ORDER BY s.trade"):
             print("\t".join(str(x or "—") for x in s))
+    return 0
+
+
+def _import_extract(conn, a) -> int:
+    """抽出データを取り込む。不正なデータは1件でも見つかれば、何も入れずに止まる。"""
+    if a.all:
+        dirs = extracts.find_all(a.extracts_dir)
+        if not dirs:
+            print(f"{a.extracts_dir} に抽出データがありません（{a.extracts_dir}/<制度ID>/<日付>/manifest.json）",
+                  file=sys.stderr)
+            return 1
+    else:
+        dirs = [Path(a.dir)]
+    # 先に全件を検証する（1件でも不正なら、どれも取り込まない）
+    loaded = [extracts.load(d, scheme_id=a.scheme, allow_count_mismatch=a.allow_count_mismatch) for d in dirs]
+    for ex in loaded:
+        for w in ex.warnings:
+            print(f"{ex.dir}: 注意: {w}", file=sys.stderr)
+        stats = extracts.import_extract(conn, ex)
+        print(f"{ex.dir}: " + json.dumps(stats, ensure_ascii=False))
+        if not ex.reviewed:
+            review = ex.manifest.get("review")
+            why = "未検品" if review is None else f"検品の結果が {review.get('result')}"
+            print(f"  {why} なので、この {len(ex.rows)} 件は地図に出ません"
+                  "（`map --include-unreviewed` で確認はできます）", file=sys.stderr)
     return 0
 
 

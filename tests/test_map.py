@@ -1,30 +1,21 @@
-import csv
 import json
 import re
 
 from conftest import TODAY
+from fixtures import make_towns
 
 from gyosya_map import geo, mapview
 from gyosya_map.ingest import import_full_list
 
-HEADER = ["都道府県コード", "都道府県名", "都道府県名カナ", "都道府県名ローマ字", "市区町村コード", "市区町村名",
-          "市区町村名カナ", "市区町村名ローマ字", "大字町丁目名", "大字町丁目名カナ", "大字町丁目名ローマ字",
-          "小字・通称名", "緯度", "経度"]
-
 
 def _towns(conn, tmp_path):
-    rows = [("14133", "川崎市中原区", "上小田中一丁目", "", 35.58, 139.63),
-            ("14133", "川崎市中原区", "上小田中三丁目", "", 35.59, 139.64),
-            ("14133", "川崎市中原区", "井田", "字A", 35.56, 139.64),
-            ("14133", "川崎市中原区", "井田", "字B", 35.58, 139.66),     # 小字が分かれている → 平均
-            ("14401", "愛甲郡愛川町", "中津", "", 35.51, 139.33),
-            ("14133", "川崎市中原区", "座標なし", "", "", "")]
-    f = tmp_path / "latest.csv"
-    with open(f, "w", encoding="utf-8", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(HEADER)
-        for code, city, town, koaza, lat, lng in rows:
-            w.writerow(["14", "神奈川県", "", "", code, city, "", "", town, "", "", koaza, lat, lng])
+    f = make_towns(tmp_path / "latest.csv", [
+        ("14133", "川崎市中原区", "上小田中一丁目", "", 35.58, 139.63),
+        ("14133", "川崎市中原区", "上小田中三丁目", "", 35.59, 139.64),
+        ("14133", "川崎市中原区", "井田", "字A", 35.56, 139.64),
+        ("14133", "川崎市中原区", "井田", "字B", 35.58, 139.66),     # 小字が分かれている → 平均
+        ("14401", "愛甲郡愛川町", "中津", "", 35.51, 139.33),
+        ("14133", "川崎市中原区", "座標なし", "", "", "")])
     assert geo.load_towns(conn, f) == 4
     return f
 
@@ -74,8 +65,8 @@ def test_map_html(conn, tmp_path):
     assert text.count("</script>") == 3               # 名前の </script> でスクリプトが切れない
     data = json.loads(re.search(r"const POINTS = (.*);\n", text).group(1).replace("<\\/", "</"))
     meta = json.loads(re.search(r"const META = (.*);\n", text).group(1))
-    assert {"trade": "water", "license_name": "川崎市指定給水装置工事事業者", "active": 0, "fetched_at": None} \
-        in meta["coverage"]
+    assert {"trade": "water", "license_name": "川崎市指定給水装置工事事業者", "active": 0, "unreviewed": 0,
+            "fetched_at": None} in meta["coverage"]
     assert data[0]["name"] == "サンプル</script><b>解体" and data[0]["source_url"] == "https://example.invalid/m"
 
 

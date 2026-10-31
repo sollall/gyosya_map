@@ -79,8 +79,8 @@ class Result:
         for e in self.evidence:
             until = f" 有効期限: {e.valid_until}" if e.valid_until else ""
             scope = f" 範囲: {e.sub_scope}" if e.sub_scope else ""
-            lines.append(f"  根拠: {e.authority} {e.license_name} 第{e.license_no}号 {e.name}"
-                         f"（{e.status}）{until}{scope}")
+            lines.append(f"  根拠: {e.authority} {e.license_name} {_license_label(e.license_no)} {e.name}"
+                         f"（{e.status}{'・未検品' if e.needs_review else ''}）{until}{scope}")
             lines.append(f"        出典: {e.source_url or '—'}（取得日: {e.fetched_at or '—'}）")
         for n in self.notes:
             mark = "重要" if n["severity"] == "important" else "参考"
@@ -92,6 +92,11 @@ class Result:
                 if s.contact:
                     lines.append(f"  確認先: {s.contact}（{s.license_name}）{s.source_url or ''}")
         return "\n".join(lines)
+
+
+def _license_label(license_no: str) -> str:
+    """番号は原文のまま持っているので、「第…号」が既に付いていれば足さない。"""
+    return license_no if ("第" in license_no or "号" in license_no) else f"第{license_no}号"
 
 
 def _completeness(conn: sqlite3.Connection, scheme: sqlite3.Row, has_client: bool) -> str:
@@ -219,7 +224,8 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
                                      "fetched_at": today.isoformat(), "needs_review": 0, "address": None,
                                      "sub_scope": None, "valid_until": None, "status": "active", **f})
     if any(r["needs_review"] for r in hits):
-        result.warnings.append("PDFから抽出した行を含みます（目視検品前）。")
+        result.warnings.append("検品（目視確認）が済んでいない抽出行を含みます。"
+                               "根拠の行に「未検品」と付けた行は、原本と一致しているか確かめていません。")
 
     # 4. 有効期間とステータス
     valid = [r for r in hits if _is_valid(r, today)]

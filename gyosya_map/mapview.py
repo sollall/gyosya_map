@@ -2,6 +2,7 @@
 （Leaflet＋国土地理院の地図）。
 
 業者の所在地は町丁目の代表点に置く。期限切れ・取消・名簿から消えた業者は出さない。代表者名も出さない。
+検品（目視確認）が済んでいない行（needs_review = 1）も既定では出さない。
 """
 
 from __future__ import annotations
@@ -33,6 +34,8 @@ class MapStats:
     plotted: int = 0
     no_address: int = 0
     not_found: list[str] = field(default_factory=list)   # 座標にできなかった住所
+    unreviewed: int = 0                                  # 検品前の行（既定では地図に出さない）
+    include_unreviewed: bool = False
 
 
 def _scheme_trades(trade: str | None) -> tuple[str, ...]:
@@ -40,8 +43,11 @@ def _scheme_trades(trade: str | None) -> tuple[str, ...]:
 
 
 def collect(conn: sqlite3.Connection, *, schemes: list[str] | None = None, trade: str | None = None,
-            today: dt.date | None = None) -> tuple[list[dict], MapStats]:
-    """今日の時点で有効な行（status が active で有効期限内）だけを集める。"""
+            today: dt.date | None = None, include_unreviewed: bool = False) -> tuple[list[dict], MapStats]:
+    """今日の時点で有効な行（status が active で有効期限内）だけを集める。
+
+    検品前の行（needs_review = 1）は include_unreviewed のときだけ含める。除いた件数は stats.unreviewed。
+    """
     today = today or dt.date.today()
     trades = _scheme_trades(trade)
     where = [f"s.trade IN ({','.join('?' * len(trades))})", "l.status = 'active'",
@@ -51,15 +57,19 @@ def collect(conn: sqlite3.Connection, *, schemes: list[str] | None = None, trade
         where.append(f"l.scheme_id IN ({','.join('?' * len(schemes))})")
         args += schemes
     rows = conn.execute(
-        f"""SELECT l.license_no, l.name, l.address, l.valid_until, l.fetched_at, l.scheme_id,
+        f"""SELECT l.license_no, l.name, l.address, l.valid_until, l.fetched_at, l.scheme_id, l.needs_review,
                    s.license_name, s.trade, a.name AS authority, COALESCE(d.url, s.source_url) AS source_url
             FROM licensee l JOIN scheme s USING (scheme_id) JOIN authority a USING (authority_id)
             LEFT JOIN source_document d ON d.doc_id = l.source_doc
             WHERE {' AND '.join(where)} ORDER BY s.trade, l.scheme_id, l.license_no""", args).fetchall()
-    stats = MapStats()
+    stats = MapStats(include_unreviewed=include_unreviewed)
     cache: dict[str, object] = {}
     points = []
     for r in rows:
+        if r["needs_review"]:
+            stats.unreviewed += 1
+            if not include_unreviewed:
+                continue
         if not r["address"]:
             stats.no_address += 1
             continue
@@ -73,22 +83,28 @@ def collect(conn: sqlite3.Connection, *, schemes: list[str] | None = None, trade
                        "trade": r["trade"], "license_name": r["license_name"], "authority": r["authority"],
                        "license_no": r["license_no"], "name": r["name"], "address": r["address"],
                        "valid_until": r["valid_until"], "fetched_at": r["fetched_at"],
-                       "source_url": r["source_url"]})
+                       "source_url": r["source_url"], "needs_review": bool(r["needs_review"])})
     stats.plotted = len(points)
     return points, stats
 
 
-def coverage(conn: sqlite3.Connection, trade: str | None = None, today: dt.date | None = None) -> list[dict]:
-    """制度ごとの有効な業者の数と、名簿を取り込んだか。地図の「名簿がまだ無い業種」の表示に使う。"""
+def coverage(conn: sqlite3.Connection, trade: str | None = None, today: dt.date | None = None,
+             include_unreviewed: bool = False) -> list[dict]:
+    """制度ごとの有効な業者の数と、名簿を取り込んだか。地図の「名簿がまだ無い業種」の表示に使う。
+
+    active は地図と同じ数え方（検品前の行は include_unreviewed のときだけ数える）。unreviewed は検品前の数。
+    """
     today = today or dt.date.today()
     trades = _scheme_trades(trade)
+    valid = "l.scheme_id = s.scheme_id AND l.status = 'active' AND (l.valid_until IS NULL OR l.valid_until >= ?)"
+    reviewed = "" if include_unreviewed else " AND l.needs_review = 0"
     rows = conn.execute(
         f"""SELECT s.scheme_id, s.trade, s.license_name, s.publication_format, r.fetched_at,
-                   (SELECT count(*) FROM licensee l WHERE l.scheme_id = s.scheme_id AND l.status = 'active'
-                      AND (l.valid_until IS NULL OR l.valid_until >= ?)) AS active
+                   (SELECT count(*) FROM licensee l WHERE {valid}{reviewed}) AS active,
+                   (SELECT count(*) FROM licensee l WHERE {valid} AND l.needs_review = 1) AS unreviewed
             FROM scheme s LEFT JOIN roster_fetch r USING (scheme_id)
             WHERE s.trade IN ({','.join('?' * len(trades))}) ORDER BY s.trade, s.scheme_id""",
-        (today.isoformat(), *trades)).fetchall()
+        (today.isoformat(), today.isoformat(), *trades)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -110,6 +126,7 @@ _TEMPLATE = """<!doctype html>
   .panel .missing { color: #666; font-size: 12px; margin-top: 4px; max-height: 40vh; overflow: auto; }
   .panel .missing summary { cursor: pointer; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+  .unreviewed { background: #fde68a; border-radius: 3px; padding: 0 4px; font-size: 11px; }
   .popup dt { color: #666; font-size: 11px; } .popup dd { margin: 0 0 4px; }
 </style>
 </head>
@@ -141,7 +158,8 @@ for (const p of POINTS) {
       className: "", iconSize: [30, 30]})});
   const m = L.circleMarker([p.lat, p.lng], {radius: 7, color: "#fff", weight: 1.5, fillColor: color, fillOpacity: .9});
   m.bindPopup(`<dl class="popup">
-    <dt>${esc(p.authority)} ${esc(p.license_name)}</dt><dd><b>${esc(p.name)}</b></dd>
+    <dt>${esc(p.authority)} ${esc(p.license_name)}</dt><dd><b>${esc(p.name)}</b>${
+      p.needs_review ? ' <span class="unreviewed">未検品</span>' : ""}</dd>
     <dt>番号</dt><dd>${esc(p.license_no)}</dd>
     <dt>有効期限</dt><dd>${esc(p.valid_until ?? "名簿に記載なし")}</dd>
     <dt>所在地</dt><dd>${esc(p.address)}<br><small>位置は${esc(PRECISION[p.precision])}</small></dd>
@@ -162,9 +180,11 @@ const info = L.control({position: "bottomleft"});
 info.onAdd = () => {
   const d = L.DomUtil.create("div", "panel");
   const missing = META.coverage.filter(c => !c.active).map(c => `${esc(style(c.trade)[0])}：${esc(c.license_name)}` +
-    (c.fetched_at ? "（有効な業者なし）" : "（名簿未取り込み）"));
+    (c.unreviewed ? `（検品待ち ${c.unreviewed} 件）` : c.fetched_at ? "（有効な業者なし）" : "（名簿未取り込み）"));
   d.innerHTML = `<h1>${esc(META.title)}</h1>
     <small>${esc(META.today)} 時点で有効な登録業者 ${POINTS.length} 件` +
+    (META.unreviewed ? (META.include_unreviewed ? ` · うち未検品 ${META.unreviewed} 件`
+                                                : ` · 検品待ちで出していない ${META.unreviewed} 件`) : "") +
     (META.not_found ? ` · 位置が分からず表示できない ${META.not_found} 件` : "") + `</small>` +
     (missing.length ? `<details class="missing"><summary>地図に出ていない制度（${missing.length}）</summary>` +
       `${missing.join("<br>")}</details>` : "");
@@ -187,8 +207,9 @@ def write_map(points: list[dict], stats: MapStats, out: str | Path, title: str =
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     meta = {"title": title, "today": (today or dt.date.today()).isoformat(), "not_found": len(stats.not_found),
+            "unreviewed": stats.unreviewed, "include_unreviewed": stats.include_unreviewed,
             "trades": {k: list(v) for k, v in TRADE_STYLE.items()},
-            "coverage": [{k: c[k] for k in ("trade", "license_name", "active", "fetched_at")}
+            "coverage": [{k: c[k] for k in ("trade", "license_name", "active", "unreviewed", "fetched_at")}
                          for c in (coverage_rows or [])]}
     out.write_text(_TEMPLATE.replace("__TITLE__", html.escape(title)).replace("__POINTS__", _js(points))
                    .replace("__META__", _js(meta)), "utf-8")
