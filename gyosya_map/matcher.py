@@ -63,6 +63,7 @@ class SchemeInfo:
     contact: str | None
     source_url: str | None
     fetched_at: str | None
+    roster_exhaustive: bool = True   # False = 公開名簿が網羅的でない（名簿に無くても未登録とは限らない）
 
 
 @dataclass
@@ -108,6 +109,9 @@ def _license_label(license_no: str) -> str:
 
 def _completeness(conn: sqlite3.Connection, scheme: sqlite3.Row, live: dict[str, list[dict] | None]) -> str:
     fmt = scheme["publication_format"]
+    if not scheme["roster_exhaustive"]:
+        # 公開名簿そのものが制度の一部しか載せていないので、取り込んでも完全にはならない
+        return "low"
     if fmt in FULL_LIST_FORMATS:
         return "high" if roster_fetched_at(conn, scheme["scheme_id"]) else "none"
     if fmt == "search_system":
@@ -231,7 +235,8 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
             authority=s["authority_name"], license_name=s["license_name"],
             publication_format=s["publication_format"],
             completeness=_completeness(conn, s, live),
-            contact=s["contact"], source_url=s["source_url"], fetched_at=fetched and fetched.isoformat()))
+            contact=s["contact"], source_url=s["source_url"], fetched_at=fetched and fetched.isoformat(),
+            roster_exhaustive=bool(s["roster_exhaustive"])))
         if s["scheme_id"] in failures:
             reason = failures[s["scheme_id"]]
             result.warnings.append(f"{s['license_name']}は検索システムに問い合わせできませんでした"
@@ -316,7 +321,10 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
         lacking = [s for s in result.schemes if s.completeness != "high"]
         reasons = []
         for s in lacking:
-            if s.publication_format == "notice_diff":
+            if not s.roster_exhaustive:
+                reasons.append(f"{s.license_name}は公開名簿が網羅的でなく（制度の一部だけが公開される）、"
+                               "名簿に無くても公認がないとは限らない")
+            elif s.publication_format == "notice_diff":
                 reasons.append(f"{s.license_name}は告示の差分しか公開されておらず、名簿が不完全")
             elif s.publication_format == "search_system":
                 reasons.append(f"{s.license_name}は検索システムに問い合わせできなかった"

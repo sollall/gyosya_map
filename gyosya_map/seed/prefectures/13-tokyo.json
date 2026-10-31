@@ -163,6 +163,7 @@
    "license_name": "東京都浄化槽工事業者登録",
    "validity_years": 5,
    "publication_format": "full_list_pdf",
+   "roster_exhaustive": false,
    "source_url": "https://www.toshiseibi.metro.tokyo.lg.jp/kenchiku_kaihatsu/kenchiku_shidou/gyosya_shido/p_tank",
    "contact": "東京都都市整備局 市街地建築部 建設業課（〒163-8001 東京都新宿区西新宿2-8-1 都庁第二本庁舎3階南側、代表 03-5321-1111 内線 30-651・653）",
    "terms_of_use": "東京都都市整備局サイトポリシー（https://www.toshiseibi.metro.tokyo.lg.jp/about.html）。「当サイトに掲載している個々の情報（文章、写真、イラストなど）の著作権は、原則として東京都都市整備局に帰属します」「無断で複製・転用することはできません」。この一覧には、建設業許可業者名簿のような二次配布禁止の個別注記は付いていない。オープンデータ（CC BY）指定は無い。抽出データをリポジトリに置いてよいかは要判断で、置く場合は出典「東京都都市整備局」を明記する。",

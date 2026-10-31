@@ -186,6 +186,20 @@ def test_excluded_scheme_is_still_other_authority(conn):
     assert r.message == "埼玉県浄化槽保守点検業者登録はあるが、埼玉県浄化槽工事業登録は確認できない"
 
 
+def test_non_exhaustive_roster_does_not_conclude_not_found(conn):
+    """公開名簿が網羅的でない制度は、名簿を取り込んでも「名簿に無い＝不可」と判定しない。"""
+    # 東京都浄化槽工事業者登録に公開されるのは「登録」業者だけで、「届出」の一覧は非公開
+    _full(conn, "pref-13.septic-construction", [{"license_no": "J1", "name": "見本浄化槽工事"}])
+    chiyoda = "東京都千代田区丸の内1-1"
+    r = check(conn, address=chiyoda, trade="septic", name="載っていない業者", today=TODAY)
+    assert [s.license_name for s in r.schemes] == ["東京都浄化槽工事業者登録"]
+    assert r.verdict == UNDETERMINED                    # NOT_FOUND（名簿に見当たらない）にしない
+    assert "網羅的でなく" in r.message and "東京都都市整備局" in r.message
+    assert [s.completeness for s in r.schemes] == ["low"]
+    # 名簿に載っている業者は、網羅的でなくても公認ありになる
+    assert check(conn, address=chiyoda, trade="septic", name="見本浄化槽工事", today=TODAY).verdict == AUTHORIZED
+
+
 def test_page_monitor_queues_changes_and_errors(conn):
     bodies = {}
 
