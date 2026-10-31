@@ -18,17 +18,28 @@ MIN_INTERVAL = 10.0
 _last_access: dict[str, float] = {}
 
 
-def fetch(url: str, *, timeout: float = 60.0) -> bytes:
+def request(url: str, *, data: bytes | None = None, headers: dict[str, str] | None = None,
+            timeout: float = 60.0, opener=None) -> bytes:
+    """同じホストへの間隔を守って1回だけ取得する。
+
+    data を渡すと POST になる。opener には Cookie を持つ opener を渡せる
+    （検索システムはセッションを張ってから検索する）。
+    """
     host = urlparse(url).netloc
     wait = _last_access.get(host, 0) + MIN_INTERVAL - time.monotonic()
     if wait > 0:
         time.sleep(wait)
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    open_url = opener.open if opener is not None else urllib.request.urlopen
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:
+        with open_url(req, timeout=timeout) as res:
             return res.read()
     finally:
         _last_access[host] = time.monotonic()
+
+
+def fetch(url: str, *, timeout: float = 60.0) -> bytes:
+    return request(url, timeout=timeout)
 
 
 def download(url: str, dest_dir: str | Path = "data/downloads") -> Path:

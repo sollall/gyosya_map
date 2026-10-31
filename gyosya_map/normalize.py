@@ -30,6 +30,11 @@ def nfkc(text: str) -> str:
     return unicodedata.normalize("NFKC", text or "")
 
 
+def strip_corp_form(name: str) -> str:
+    """商号から法人格（株式会社・(株) など）を外す。前株・後株どちらでも。"""
+    return _CORP_RE.sub("", name or "")
+
+
 def normalize_name(name: str) -> str:
     """商号の照合キー。全角半角・法人格の前後・空白・旧字体を吸収する。"""
     s = nfkc(name).translate(_ITAIJI)
