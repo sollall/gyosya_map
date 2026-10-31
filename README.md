@@ -185,20 +185,22 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 担当機関のIDは `pref-<都道府県コード>`、`muni-<団体コード6桁>` で、市区町村マスターから自動で作る。
 上下水道局・企業団などは seed の `authorities` に書く。
 
-`gyosya_map/seed/prefectures/<コード>-<名前>.json` を足す:
+`gyosya_map/seed/prefectures/<コード>-<名前>.json` を足す。
+下の例の都道府県コード`99`と「見本県」は**架空**で、書き方を見せるためだけのもの。
+実際の中身は `gyosya_map/seed/prefectures/` の各ファイルを見る。
 
 ```json
 {
-  "prefecture": "13",
-  "authorities": [{"authority_id": "tokyo-suido", "name": "東京都水道局", "level": "water_utility", "parent_id": "pref-13"}],
+  "prefecture": "99",
+  "authorities": [{"authority_id": "mihon-suido", "name": "見本県営水道", "level": "water_utility", "parent_id": "pref-99"}],
   "schemes": [{
-    "scheme_id": "pref-13.demolition", "authority_id": "pref-13", "trade": "demolition",
-    "license_name": "東京都解体工事業登録", "validity_years": 5, "publication_format": "full_list_excel",
-    "source_url": "https://...", "contact": "東京都 ○○課", "verified_at": "2026-10-30",
+    "scheme_id": "pref-99.demolition", "authority_id": "pref-99", "trade": "demolition",
+    "license_name": "見本県解体工事業登録", "validity_years": 5, "publication_format": "full_list_excel",
+    "source_url": "https://...", "contact": "見本県 ○○課", "verified_at": "2026-10-30",
     "parser": {"sheets": ["登録業者一覧"], "header_row": 3, "aliases": {"name": ["屋号"]}}
   }],
-  "municipalities": {"府中市": {"jurisdiction": {"water": ["tokyo-suido"]}}, "檜原村": {"public_sewer": false}},
-  "overrides": [{"municipality": "八王子市", "town_prefix": "○○町", "trade": "sewer", "authority_id": null, "note": "公共下水道の区域外"}]
+  "municipalities": {"見本市": {"jurisdiction": {"water": ["mihon-suido"]}}, "山里村": {"public_sewer": false}},
+  "overrides": [{"municipality": "見本市", "town_prefix": "○○町", "trade": "sewer", "authority_id": null, "note": "公共下水道の区域外"}]
 }
 ```
 
