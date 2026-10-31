@@ -66,7 +66,11 @@ def test_download_scheme_from_page(conn, tmp_path):
 def test_download_scheme_errors_and_direct_file(conn, tmp_path):
     db.load_seed_data(conn, {"schemes": [{"scheme_id": "pref-14.demolition", "authority_id": "pref-14",
                                           "trade": "demolition", "license_name": "x",
-                                          "source_url": PAGE, "download": {"text_pattern": "存在しない"}}]})
+                                          "source_url": PAGE, "download": {"text_pattern": "存在しない"}},
+                                         # 掲載ページが分からない制度（名簿が電話照会だけの制度など）
+                                         {"scheme_id": "pref-14.unknown", "authority_id": "pref-14",
+                                          "trade": "electrical", "license_name": "y",
+                                          "publication_format": "phone_only"}]})
     with pytest.raises(ValueError, match="--list"):
         download_scheme(conn, "pref-14.demolition", tmp_path, fetcher=_fake_fetcher({PAGE: HTML.encode()}))
     # source_url がPDFそのもの（川崎市の告示）ならページを読まずに取る
@@ -75,7 +79,7 @@ def test_download_scheme_errors_and_direct_file(conn, tmp_path):
     [d] = download_scheme(conn, "kawasaki-suido.water", tmp_path, fetcher=f, today=TODAY)
     assert f.calls == [pdf_url] and d.path.name == "7422.pdf"
     with pytest.raises(ValueError, match="source_url"):
-        download_scheme(conn, "meti.electrical", tmp_path, fetcher=f)
+        download_scheme(conn, "pref-14.unknown", tmp_path, fetcher=f)
 
 
 def test_xls_old_excel(tmp_path):

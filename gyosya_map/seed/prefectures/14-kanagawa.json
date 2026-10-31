@@ -49,21 +49,37 @@
    "trade": "waste",
    "license_name": "川崎市一般廃棄物収集運搬業許可",
    "validity_years": 2,
-   "publication_format": null,
-   "source_url": "https://www.city.kawasaki.jp/300/cmsfiles/contents/0000062/62414/20250401ichijitaryousyorigyokyokashinseitebiki.pdf",
-   "contact": "川崎市環境局",
+   "publication_format": "full_list_pdf",
+   "source_url": "https://www.city.kawasaki.jp/300/page/0000118391.html",
+   "contact": "川崎市環境局生活環境部廃棄物指導課（〒210-8577 川崎市川崎区宮本町1番地、電話 044-200-2593）",
+   "terms_of_use": "川崎市ホームページの著作権・リンク・免責事項（https://www.city.kawasaki.jp/main/site_policy/0000000027.html）。引用・私的複製以外の転載は事前連絡が必要、内容を改変しないこと。出典「川崎市」の表記を付ける。",
    "required_sub_scope": "一時多量ごみ",
-   "verified_at": "2026-10-30",
+   "verified_at": "2026-10-31",
    "notes": [
     {
      "severity": "important",
      "body": "家庭の不用品回収・遺品整理（一時多量ごみ）は、一般廃棄物収集運搬業の許可のうち「一時多量ごみ」を範囲に含む許可が別に必要。"
     },
     {
+     "severity": "important",
+     "body": "名簿は2種類あり、「一時多量ごみ」の範囲が分かるのは一時多量ごみ許可業者一覧の方だけ。source_url はこちらを指している（2026-07-10現在9社。許可番号・許可業者・市内事業所住所・連絡先・ホームページURL）。"
+    },
+    {
+     "severity": "info",
+     "body": "全件の一般廃棄物処理業者名簿（2026-10-01現在128社。許可番号・業者名・住所・許可の種類）: https://www.city.kawasaki.jp/300/page/0000063575.html 。許可の種類は「収集運搬業」などで、一時多量ごみの別はこの名簿では分からない。"
+    },
+    {
      "severity": "info",
      "body": "一時多量ごみの収集制度: https://www.city.kawasaki.jp/300/cmsfiles/contents/0000113/113718/ichijitaryo.pdf"
+    },
+    {
+     "severity": "info",
+     "body": "更新頻度はページに明記されていない。一時多量ごみ一覧はページ更新日2026-07-10／ファイル名 R80710、全件名簿はページ更新日2026-10-01／ファイル名 R081001。ファイル名に日付が入るので download でリンク文字から探す。"
     }
-   ]
+   ],
+   "download": {
+    "text_pattern": "一時多量ごみ許可業者一覧"
+   }
   },
   {
    "scheme_id": "muni-141305.septic-maintenance",
@@ -87,10 +103,21 @@
    "trade": "electrical",
    "license_name": "神奈川県登録電気工事業者",
    "validity_years": 5,
-   "publication_format": null,
-   "source_url": "https://www.pref.kanagawa.jp/documents/85947/tebiki_4.pdf",
-   "contact": "神奈川県",
-   "verified_at": "2026-10-30"
+   "publication_format": "phone_only",
+   "source_url": "https://www.pref.kanagawa.jp/docs/a2p/denki/denkitoppage.html",
+   "contact": "神奈川県くらし安全防災局防災部消防保安課（電話 045-210-3475／火薬・電気）",
+   "terms_of_use": "名簿の公開なし。登録簿の閲覧・謄本交付は有料で、e-kanagawa の電子申請から請求する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "important",
+     "body": "登録電気工事業者の名簿は一覧として公開されていない。この制度は地図に出せない。「登録電気工事業者の登録簿は、誰でも閲覧・謄本交付請求することが可能です。（有料）」とあり、e-kanagawa「登録簿閲覧請求」1回440円／「登録簿謄本交付請求」1件600円で個別に照会する。"
+    },
+    {
+     "severity": "info",
+     "body": "県のページにあるのは手引き・様式と電子申請の入口だけ。業者一覧を載せているのは電気工事工業組合などの業界団体や民間サイトで、登録簿そのものではない。"
+    }
+   ]
   },
   {
    "scheme_id": "pref-14.demolition",
@@ -134,8 +161,28 @@
    "trade": "water",
    "license_name": "横浜市指定給水装置工事事業者",
    "validity_years": 5,
-   "publication_format": null,
-   "contact": "横浜市水道局"
+   "publication_format": "full_list_excel",
+   "source_url": "https://www.city.yokohama.lg.jp/business/bunyabetsu/suido/kyuusui-souchi/tetsuzuki/shiteikojijigyosha.html",
+   "contact": "横浜市水道局給水サービス部給水維持課（電話 045-671-3069、su-kyusuiiji@city.yokohama.lg.jp）",
+   "terms_of_use": "横浜市サイトポリシー（https://www.city.yokohama.lg.jp/aboutweb/sitepolicy.html）。原則として著作権は横浜市にあるが「数値データ、簡単な表・グラフ等は著作権による保護の対象ではありませんので、自由に利用できます」とあり、名簿は単純な表に当たる。出典「横浜市水道局」を表記する。",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "info",
+     "body": "全事業者のExcelと、市内・市外に分けたPDFの3つが並ぶ。全件が1ファイルで揃うExcelを取る。"
+    },
+    {
+     "severity": "info",
+     "body": "毎月15日（休日の場合は翌営業日）締めで翌月の第一営業日に更新。2026-10-31時点の最新は令和8年9月15日現在（1,787件。次は11月初営業日に10月15日現在へ更新見込み）。"
+    },
+    {
+     "severity": "info",
+     "body": "抽出のときの注意: ファイル名とシート名に基準日が入る（1149_20260929.xlsx／シート「R8.９.15」）ので固定できない。シートは「工事を依頼する前に」と名簿の2枚、見出しは4行目、列は 指定番号・事業者名・フリガナ・都道府県又は市・市又は区・所在地・電話番号・指定の有効期限で、住所が3列に分かれている。"
+    }
+   ],
+   "download": {
+    "href_pattern": "\\.xlsx?$"
+   }
   }
  ],
  "municipalities": {

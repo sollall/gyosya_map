@@ -19,11 +19,23 @@
    "trade": "electrical",
    "license_name": "登録電気工事業者（経済産業大臣登録）",
    "validity_years": 5,
-   "publication_format": null,
+   "publication_format": "phone_only",
+   "source_url": "https://www.meti.go.jp/policy/safety_security/industrial_safety/sangyo/electric/detail/tebiki_08.html",
+   "contact": "経済産業省 大臣官房 産業保安・安全グループ 電力安全課 資格担当（〒100-8901 東京都千代田区霞が関1-3-1、代表 03-3501-1511）",
+   "terms_of_use": "名簿の公開なし。登録簿の謄本交付・閲覧は有料の請求手続（様式第14）による。",
+   "verified_at": "2026-10-31",
    "notes": [
     {
      "severity": "info",
      "body": "2以上の都道府県に営業所を置く電気工事業者は経済産業大臣（産業保安監督部）の登録。"
+    },
+    {
+     "severity": "important",
+     "body": "登録電気工事業者登録簿は一覧として公開されていない。この制度は地図に出せない。照会は登録簿の謄本交付（1枚820円）か閲覧（1回710円）を電力安全課へ請求する（電気工事業法第16条、様式第14）。"
+    },
+    {
+     "severity": "info",
+     "body": "2以上の産業保安監督部の区域にまたがる場合でも、関東東北・中部近畿・中国四国の各管内に収まるときは請求先が当該産業保安監督部になる。関東東北産業保安監督部の窓口: https://www.safety-kanto.meti.go.jp/electric/kojigyo/e_touroku07.html"
     }
    ]
   },
