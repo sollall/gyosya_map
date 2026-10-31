@@ -354,6 +354,10 @@
     },
     {
      "severity": "info",
+     "body": "取得手順（CMPA-14 のあとに抽出する人向け。2026-11-01 に実行して確認済み）: `curl -sSL -o data/raw/muni-111007.septic-cleaning/opendata-4778.csv https://opendata.pref.saitama.lg.jp/resource_download/4778` で原本が取れる。1,342バイト、sha256 655d986d4e2b65db224dc499c30db8f94f9a0df2d39291125a15d3df0a16b7c8（2026-10-31 と 2026-11-01 で同じ内容）。HTTPの Content-Type は text/csv; charset=UTF-8 と出るが実体は Shift_JIS（CP932）、改行は CRLF、全26行。1行目が表題「さいたま市浄化槽清掃許可業者一覧表」、2行目が見出し、3〜25行目が業者23行、26行目が「（令和7年4月1日現在）」だけの注記行。同一ホストへのアクセスは10秒以上あける。"
+    },
+    {
+     "severity": "info",
      "body": "許可の有効期間は市のページにも浄化槽法にも年数の記載が見つからなかったので validity_years は空にしてある。"
     }
    ],
