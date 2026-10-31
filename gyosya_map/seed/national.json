@@ -35,7 +35,19 @@
    "validity_years": 5,
    "publication_format": "search_system",
    "source_url": "https://etsuran2.mlit.go.jp/TAKKEN/kensetuKensaku.do",
-   "contact": "国土交通省 関東地方整備局"
+   "contact": "国土交通省 関東地方整備局",
+   "terms_of_use": "国土交通省のサイトポリシー（https://www.mlit.go.jp/link.html）。公共データ利用規約（PDL1.0）に準拠した条件で、出典の記載が必要。robots.txt はなく、機械的アクセスを禁じる記載も見当たらない（2026-10-31 確認）",
+   "verified_at": "2026-10-31",
+   "notes": [
+    {
+     "severity": "info",
+     "body": "検索システムの掲載情報は月2回の更新で、直近の変更は反映されていないことがある。"
+    },
+    {
+     "severity": "info",
+     "body": "更新申請中の場合は、許可の有効期間を過ぎても処分が行われるまで許可は有効として扱われる。"
+    }
+   ]
   }
  ]
 }

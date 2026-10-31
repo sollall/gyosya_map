@@ -90,6 +90,9 @@ uv run gyosya-map notice --scheme kawasaki-suido.water --file https://www.city.k
 uv run gyosya-map check --address 川崎市中原区小杉町3丁目1 --trade water --license 123
 uv run gyosya-map check --address 川崎市幸区1 --trade 解体 --name サンプル解体 --json
 
+# 建設業許可（検索システム型）も確かめる。ネットワークに接続する
+uv run gyosya-map check --address 川崎市幸区1 --trade reform --name 見本建設株式会社 --search
+
 # 定期処理（月1回など）
 uv run gyosya-map expire    # 有効期限切れの行を expired に
 uv run gyosya-map monitor   # 掲載ページのハッシュ監視 → 変化・取得失敗を再取得キューへ
@@ -199,17 +202,36 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 | `gyosya_map/normalize.py` | 商号（法人格・全角半角・空白・旧字体）、番号、住所、和暦の正規化 |
 | `gyosya_map/ingest/` | 公開形式ごとのパーサー（Excel .xlsx/.xls・PDF・告示PDF・CSV）と制度ごとの読み込み設定、名簿のダウンロード、原本保存、ページ監視 |
 | `gyosya_map/matcher.py` | 照合ロジックと判定 |
+| `gyosya_map/search_system.py` | 検索システム型の制度（国交省 建設業者検索）への照会 |
 | `gyosya_map/freshness.py` | 期限の自動処理、90日警告 |
 | `gyosya_map/geo.py`, `mapview.py` | 住所 → 町丁目の代表点、地図のHTML |
 
-検索システム型の制度（国交省 建設業者検索）は、照会時に問い合わせる `SearchSystemClient` を `check()` に渡す。
+### 検索システム型の制度（国交省 建設業者検索）
+
+建設業許可（`mlit.construction`・`pref-<コード>.construction`）には名簿の一括ダウンロードがなく、
+[建設業者・宅建業者等企業情報検索システム](https://etsuran2.mlit.go.jp/TAKKEN/kensetuKensaku.do)しかない。
+そこで `gyosya_map/search_system.py` の `MlitConstructionSearch` が、**照合のときに業者名または
+許可番号で1件ずつ問い合わせる**（`check --search`、または `check()` に `search_client=` を渡す）。
 渡さない場合は「検索システムでの確認が必要」として判定不能を返す。
+
+- **結果は `licensee` に入れない**。取り込むとクリーンな環境から同じDBを再生成できなくなり、
+  検品済みの抽出データだけを地図に出すという約束も崩れるため、照合のときだけ参照する。
+  地図では引き続き「名簿未取り込み」の制度として左下に出る。
+- 許可番号で検索すると他県の同じ番号も返るので、許可行政庁コード（業者概要へのリンクの先頭2桁。
+  00＝国土交通大臣、01〜47＝都道府県）で制度と一致する行だけを採り、商号・番号の完全一致で絞る。
+- 有効期間は業者概要の画面にしかないため、一致した行ごとに1回だけ開く。
+  同じホストへのアクセスは10秒以上あけるので、1回の照合に数十秒かかる。
+- 「該当なし」「取得失敗」「システム変更（画面の作りが想定と違う）」「候補が多すぎる」を区別し、
+  該当なし以外は判定不能のまま理由を警告に出す（詳細は `log`／`--search` の標準エラー出力）。
+- robots.txt・利用規約・ご利用方法のPDFを確認し、機械的アクセスを禁じる記載がないことを
+  2026-10-31 に確かめた（判断の根拠は `search_system.py` の冒頭と制度の `terms_of_use`）。
 
 ## フェーズ0で残っていること
 
 - 実データの取り込み: 各名簿・告示の実ファイルでパーサーの見出し対応（`ingest/columns.py`）を確認する
 - 公開形式が未調査の制度（`publication_format: null`）: 川崎市の一般廃棄物、神奈川県・経産大臣の電気工事、横浜市の水道
-- 建設業者検索の `SearchSystemClient` 実装
+- 建設業許可の許可業種（土・建・…の略号）は読み取っていない。範囲（`required_sub_scope`）が必要な
+  建設業の制度が出てきたら、業者概要の業種の表を読む必要がある
 - 仕様書の未決事項（提供形態、住所→水道事業体の対応表の入手元、告示の過去分の取り方、浄化槽登録の全国一覧）
 
 ## テスト

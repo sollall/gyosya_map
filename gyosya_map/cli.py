@@ -84,6 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--name", help="業者名")
     sp.add_argument("--license", help="許可番号・指定番号")
     sp.add_argument("--business-address", help="業者の所在地（同名業者の絞り込み）")
+    sp.add_argument("--search", action="store_true",
+                    help="検索システム型の制度（建設業許可）に問い合わせる。ネットワークに接続し、"
+                         "同じホストへのアクセスは10秒以上あけるので時間がかかる")
     sp.add_argument("--json", action="store_true")
 
     sp = sub.add_parser("fetch", help="掲載ページから名簿ファイルを探してダウンロードする")
@@ -201,9 +204,17 @@ def _run(a, conn) -> int:
         for addr in stats.not_found[:10]:
             print(f"  位置が分からない: {addr}", file=sys.stderr)
     elif a.cmd == "check":
+        client = None
+        if a.search:
+            from .search_system import MlitConstructionSearch
+            client = MlitConstructionSearch()
         r = check(conn, address=a.address, trade=a.trade, name=a.name, license_no=a.license,
-                  business_address=a.business_address)
+                  business_address=a.business_address, search_client=client)
         print(json.dumps(r.to_dict(), ensure_ascii=False, indent=2) if a.json else r.render())
+        for o in getattr(client, "log", []):
+            # 見つかった・該当なし・取得失敗・システム変更の区別を残す
+            print(f"検索システム: {o.scheme_id} {o.state}（{o.rows} 件 / {o.requests} リクエスト）"
+                  f"{' ' + o.message if o.message else ''}", file=sys.stderr)
     elif a.cmd == "expire":
         print(f"{freshness.expire(conn)} 件を期限切れにしました")
     elif a.cmd == "monitor":
