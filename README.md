@@ -19,8 +19,9 @@ uv run gyosya-map init
 ```
 
 版を上げたあとも `uv run gyosya-map init` を実行すれば、古いDBに足りない列を追加する。
-列の追加で直せない変更のときは `uv run gyosya-map init --reset` で作り直す（取り込んだ名簿は消えるが、
-原本は data/raw/ に残り、`data_extracts/` の抽出データからは `import-extract --all` で入れ直せる）。
+列の追加で直せない変更（NOT NULL・CHECK 制約の変更）のときは `init` が気づいてその旨を出すので、
+`uv run gyosya-map init --reset` で作り直す（取り込んだ名簿は消えるが、原本は data/raw/ に残り、
+`data_extracts/` の抽出データからは `import-extract --all` で入れ直せる）。
 
 **CMPA-14 より前のDBは `init --reset` が必要。** `licensee.license_no` を NULL 可にし（原本に許可番号の
 欄が無い制度のため）、`scheme.publication_format` に `full_list_csv` を足したので、どちらも

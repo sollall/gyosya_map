@@ -13,6 +13,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import sqlite3
 from importlib import resources
 from pathlib import Path
@@ -39,10 +40,25 @@ def _columns(conn: sqlite3.Connection, table: str) -> dict[str, sqlite3.Row]:
     return {r["name"]: r for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
+_CHECK_RE = re.compile(r"CHECK\s*\((?:[^()]|\([^()]*\))*\)", re.IGNORECASE)
+
+
+def _checks(sql: str | None) -> set[str]:
+    """CREATE TABLE 文の CHECK 制約を、コメントと空白の違いを無視して集める。"""
+    body = re.sub(r"--[^\n]*", "", sql or "")
+    return {re.sub(r"\s+", "", m.group(0)) for m in _CHECK_RE.finditer(body)}
+
+
+def _table_sql(conn: sqlite3.Connection, table: str) -> str | None:
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone()
+    return row and row[0]
+
+
 def init_schema(conn: sqlite3.Connection) -> list[str]:
     """表を作り、古いDBに足りない列を追加する。追加した「表.列」を返す。
 
-    NOT NULL で既定値のない列が足りないなど、列の追加では直せない場合は SchemaError。
+    NOT NULL で既定値のない列が足りない、CHECK 制約や NOT NULL が今のスキーマと違うなど、
+    列の追加では直せない場合は SchemaError（`init --reset` で作り直してもらう）。
     """
     script = resources.files("gyosya_map").joinpath("schema.sql").read_text("utf-8")
     statements, buf = [], ""
@@ -62,8 +78,14 @@ def init_schema(conn: sqlite3.Connection) -> list[str]:
     added, broken = [], []
     for (table,) in ref.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"):
         have = _columns(conn, table)
+        # CHECK 制約と NOT NULL の変更は ALTER TABLE では直せない（作り直しが要る）
+        if _checks(_table_sql(conn, table)) != _checks(_table_sql(ref, table)):
+            broken.append(f"{table}（CHECK 制約が今のスキーマと違います）")
         for name, col in _columns(ref, table).items():
             if name in have:
+                if have[name]["notnull"] != col["notnull"]:
+                    state = "NOT NULL のまま" if have[name]["notnull"] else "NOT NULL になっていません"
+                    broken.append(f"{table}.{name}（{state}）")
                 continue
             if col["pk"] or (col["notnull"] and col["dflt_value"] is None):
                 broken.append(f"{table}.{name}")

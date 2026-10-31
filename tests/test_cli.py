@@ -107,6 +107,33 @@ def test_init_upgrades_old_db_and_reset(tmp_path, capsys):
     assert main(["--db", dbp, "init", "--reset"]) == 0
 
 
+def test_init_asks_for_a_reset_when_constraints_changed(tmp_path, capsys):
+    """CHECK 制約と NOT NULL の変更は列の追加では直せないので、作り直しを案内する。
+
+    このタスクで licensee.license_no を NULL 可にし、publication_format に full_list_csv を足した。
+    """
+    import sqlite3
+
+    dbp = str(tmp_path / "old.db")
+    assert main(["--db", dbp, "init"]) == 0
+    c = sqlite3.connect(dbp)
+    licensee = c.execute("SELECT sql FROM sqlite_master WHERE name = 'licensee'").fetchone()[0]
+    scheme = c.execute("SELECT sql FROM sqlite_master WHERE name = 'scheme'").fetchone()[0]
+    old_licensee = licensee.replace("license_no     TEXT,", "license_no     TEXT NOT NULL,")
+    old_scheme = scheme.replace("'full_list_csv', ", "")
+    assert old_licensee != licensee and old_scheme != scheme     # 置換できていること
+    c.executescript(f"DROP TABLE licensee; {old_licensee}; DROP TABLE scheme; {old_scheme};")
+    c.close()
+    capsys.readouterr()
+    assert main(["--db", dbp, "init"]) == 2
+    err = capsys.readouterr().err
+    assert "licensee.license_no（NOT NULL のまま）" in err
+    assert "scheme（CHECK 制約が今のスキーマと違います）" in err
+    assert "init --reset" in err
+    assert main(["--db", dbp, "init", "--reset"]) == 0
+    assert "制度 27 件" in capsys.readouterr().out
+
+
 def test_inspect_and_purge(tmp_path, capsys):
     from fixtures import make_pdf
 
