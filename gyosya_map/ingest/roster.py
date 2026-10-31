@@ -15,26 +15,44 @@ def _today() -> dt.date:
     return dt.date.today()
 
 
+def _find_document(conn: sqlite3.Connection, scheme_id: str, sha256: str) -> int | None:
+    row = conn.execute("SELECT doc_id FROM source_document WHERE scheme_id = ? AND sha256 = ?",
+                       (scheme_id, sha256)).fetchone()
+    return row[0] if row else None
+
+
+def register_document(conn: sqlite3.Connection, scheme_id: str, *, path: str, sha256: str, kind: str,
+                      url: str | None = None, published_on: dt.date | None = None,
+                      fetched_at: dt.date | None = None) -> tuple[int, bool]:
+    """原本の記録だけを source_document に入れる。(doc_id, 新規か) を返す。
+
+    原本ファイルの中身は見ない（抽出データの取り込みでは、原本が手元にないこともある）。
+    """
+    doc_id = _find_document(conn, scheme_id, sha256)
+    if doc_id is not None:
+        return doc_id, False
+    cur = conn.execute(
+        """INSERT INTO source_document (scheme_id, url, path, sha256, kind, published_on, fetched_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (scheme_id, url, path, sha256, kind, published_on and published_on.isoformat(),
+         (fetched_at or _today()).isoformat()))
+    return cur.lastrowid, True
+
+
 def store_document(conn: sqlite3.Connection, scheme_id: str, file_path: str | Path, *, kind: str,
                    url: str | None = None, published_on: dt.date | None = None,
                    fetched_at: dt.date | None = None, raw_dir: str | Path = "data/raw") -> tuple[int, bool]:
     """原本を raw_dir に保存して source_document に記録する。(doc_id, 新規か) を返す。"""
     file_path = Path(file_path)
     sha = hashlib.sha256(file_path.read_bytes()).hexdigest()
-    row = conn.execute("SELECT doc_id FROM source_document WHERE scheme_id = ? AND sha256 = ?",
-                       (scheme_id, sha)).fetchone()
-    if row:
-        return row[0], False
+    if (doc_id := _find_document(conn, scheme_id, sha)) is not None:
+        return doc_id, False
     dest = Path(raw_dir) / scheme_id / f"{sha}{file_path.suffix.lower()}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     if file_path.resolve() != dest.resolve():
         shutil.copyfile(file_path, dest)
-    cur = conn.execute(
-        """INSERT INTO source_document (scheme_id, url, path, sha256, kind, published_on, fetched_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (scheme_id, url, str(dest), sha, kind, published_on and published_on.isoformat(),
-         (fetched_at or _today()).isoformat()))
-    return cur.lastrowid, True
+    return register_document(conn, scheme_id, path=str(dest), sha256=sha, kind=kind, url=url,
+                             published_on=published_on, fetched_at=fetched_at)
 
 
 def _validity_years(conn: sqlite3.Connection, scheme_id: str) -> int | None:
@@ -54,7 +72,10 @@ def _until(valid_from: dt.date | None, valid_until: dt.date | None, years: int |
     return end - dt.timedelta(days=1)
 
 
-def _status(valid_until: dt.date | None, today: dt.date) -> str:
+def _status(valid_until: dt.date | None, today: dt.date, given: str | None = None) -> str:
+    """名簿に書かれた状態（given）を尊重する。有効なはずの行だけ、有効期限で見直す。"""
+    if given in ("expired", "revoked", "unknown"):
+        return given
     return "expired" if valid_until and valid_until < today else "active"
 
 
@@ -100,7 +121,8 @@ def import_full_list(conn: sqlite3.Connection, scheme_id: str, records: list[dic
                        needs_review = excluded.needs_review""",
                 (scheme_id, rec["license_no"], key, rec["name"], normalize_name(rec["name"]), rec.get("address"),
                  rec.get("representative"), _iso(vf), _iso(vu), rec.get("sub_scope"), doc_id,
-                 fetched_at.isoformat(), _status(vu, today), int(bool(rec.get("needs_review")))))
+                 fetched_at.isoformat(), _status(vu, today, rec.get("status")),
+                 int(bool(rec.get("needs_review")))))
             stats["updated" if existed else "inserted"] += 1
         for row in conn.execute("SELECT licensee_id, license_no_key, valid_until, status FROM licensee "
                                 "WHERE scheme_id = ? AND status = 'active'", (scheme_id,)).fetchall():

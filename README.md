@@ -23,6 +23,23 @@ uv run gyosya-map init
 
 川崎市の制度は `muni-141305.waste` のように、担当機関ID＋業種のIDで指定する（`uv run gyosya-map schemes` で一覧）。
 
+### 名簿の取り込み（抽出データ／推奨）
+
+原本（PDF・Excel・CSV）の読み取りは**収集担当のエージェント**が行い、**正規化済みの抽出データ**を
+`data_extracts/<制度ID>/<日付>/` にコミットする。取り込みは、その抽出データを検証してDBに入れるだけの
+決定的な処理で、自治体ごとの書式解釈を含まない。形式は [`doc/extract-format.md`](doc/extract-format.md)。
+
+```bash
+# 1件（manifest.json と rows.jsonl を検証し、不正なら何も取り込まずに落ちる）
+uv run gyosya-map import-extract --scheme pref-14.demolition --dir data_extracts/pref-14.demolition/2026-11-05/
+
+# data_extracts/ 配下の全件（制度ごとに日付の古い順。クリーンなDBに同じ結果を作れるか確かめるのに使う）
+uv run gyosya-map import-extract --all
+```
+
+コミット済みの抽出データと決定的なコードだけで、クリーンな環境から同じDBと同じ地図HTMLが再生成できる状態を保つ。
+検品（`manifest.json` の `review.result` が `passed`）が済んでいない行は、`needs_review = 1` になり地図に出ない。
+
 ### 名簿のダウンロード
 
 制度ごとに登録してある掲載ページ（`source_url`）を開き、ページ内の Excel・PDF・CSV へのリンクから名簿を探してダウンロードする。
@@ -60,9 +77,13 @@ uv run gyosya-map inspect --file data/downloads/<制度ID>/<日付>/<ファイ�
 uv run gyosya-map purge --scheme <制度ID>
 ```
 
-### 手元のファイルを取り込む
+### 手元のファイルを取り込む（パーサー）
 
-ダウンロード済みのファイルを直接渡すこともできる。たとえば神奈川県の解体工事業者名簿なら、
+`ingest/` のパーサー（Excel・CSV・PDF）で直接取り込むこともできる。きれいな表には安く効くので残しているが、
+**PDF は既存の川崎市・神奈川県分の維持にとどめ、新しい自治体の受け皿にはしない**
+（新しい自治体は上の抽出データで取り込む。理由は `doc/extract-format.md`）。
+
+たとえば神奈川県の解体工事業者名簿なら、
 [掲載ページ](https://www.pref.kanagawa.jp/docs/u2h/cnt/f531856/p449157.html)から Excel をダウンロードする。
 下の例のファイル名（`<ダウンロードした名簿>.xlsx` など）は、実際に保存したファイルのパスに置き換える。
 
@@ -115,8 +136,13 @@ uv run gyosya-map fetch --all --import
 # 地図を書き出す。業種ごとの件数と、名簿がまだ無い制度も表示する
 uv run gyosya-map map --out data/map.html
 uv run gyosya-map map --trade demolition --out data/kaitai.html
+
+# 検品が済んでいない行も出す（確認用。既定では出さない）
+uv run gyosya-map map --include-unreviewed --out data/map-all.html
 ```
 
+- 検品（目視確認）が済んでいない行（`needs_review = 1`）は出さない。除いた件数を実行結果と地図の左下に出し、
+  `--include-unreviewed` で含められる（含めた点はポップアップに「未検品」と付く）。
 - 業種ごとに表示を切り替えられ、近い点はまとめて表示する。
 - 左下に、名簿をまだ取り込んでいない制度（公開形式が未調査・検索システム型など）を出す。
 - ピンを押すと、業者名・番号・有効期限・所在地・出典の名簿と取得日が出る。代表者名は出さない。
@@ -136,8 +162,9 @@ uv run gyosya-map map --trade demolition --out data/kaitai.html
 | 判定不能 | 名簿が告示差分のみ・未公開・未取得、または制度情報が未整備 |
 | 制度なし | 公認制度がない業種、または公共下水道の区域外など |
 
-結果には根拠（出典URL・取得日）、その地域の注意点（`important` は必ず表示）、取得から90日を超えた名簿の警告、
-PDF抽出行の検品前警告が付く。代表者名は照合にだけ使い、結果には出さない。
+結果には根拠（出典URL・取得日）、その地域の注意点（`important` は必ず表示）、取得から90日を超えた名簿の警告が付く。
+検品が済んでいない行は根拠に「未検品」と付け、注意を出す（地図とは違い、照合では未検品の行も使う）。
+代表者名は照合にだけ使い、結果には出さない。
 
 ## 自治体を追加する
 
@@ -174,8 +201,11 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 
 - `municipalities` のキーは都道府県内の名前か団体コード。政令市に書いた例外は行政区にも効く。
 - `parser` は名簿の読み込み設定（見出しの行・列名・シート・告示の見出し語など。`ingest/config.py`）。
-  自治体ごとの書式の違いはコードを変えずにここで吸収する。書く前に
+  きれいな表ならコードを変えずにここで吸収できる。書く前に
   `uv run gyosya-map preview --scheme ID --file 名簿.xlsx --parser-config '{"header_row": 3}'` で読み取りを確かめる。
+- 読み込み設定では読み取れない書式（多くのPDFなど）に**パーサーを足さない**。原本の読み取りは収集担当の
+  エージェントに任せ、`data_extracts/` の抽出データとして取り込む（[`doc/extract-format.md`](doc/extract-format.md)）。
+  この場合 seed に書くのは制度だけで、`parser` は要らない。
 
 ### 住所の解析
 
@@ -197,6 +227,8 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 | `gyosya_map/seed/` | 市区町村マスター、保健所設置市、国の制度、都道府県ごとの制度と例外 |
 | `gyosya_map/jurisdiction.py` | 住所 → 市区町村コード → 業種ごとの担当機関（既定ルール、例外、町丁目の上書き） |
 | `gyosya_map/normalize.py` | 商号（法人格・全角半角・空白・旧字体）、番号、住所、和暦の正規化 |
+| `gyosya_map/extracts.py` | 抽出データ（`data_extracts/`）の検証と取り込み。書式解釈を含まない決定的な処理 |
+| `doc/extract-format.md` | 抽出データの形式（収集担当エージェント向け） |
 | `gyosya_map/ingest/` | 公開形式ごとのパーサー（Excel .xlsx/.xls・PDF・告示PDF・CSV）と制度ごとの読み込み設定、名簿のダウンロード、原本保存、ページ監視 |
 | `gyosya_map/matcher.py` | 照合ロジックと判定 |
 | `gyosya_map/freshness.py` | 期限の自動処理、90日警告 |
