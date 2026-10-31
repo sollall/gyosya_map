@@ -55,17 +55,27 @@ def test_map_html(conn, tmp_path):
         {"license_no": "3", "name": "住所なし解体"},
         {"license_no": "4", "name": "不明解体", "address": "どこにもない市1"},
     ], doc_id=1, today=TODAY)
+    import_full_list(conn, "muni-141305.septic-maintenance", [
+        {"license_no": "S1", "name": "サンプル浄化槽", "address": "川崎市中原区井田1"}], doc_id=1, today=TODAY)
+    conn.execute("UPDATE licensee SET status = 'revoked' WHERE license_no = '4'")
     points, stats = mapview.collect(conn, today=TODAY)
-    assert [p["status"] for p in points] == ["active", "expired"]
-    assert (stats.plotted, stats.no_address, stats.not_found) == (2, 1, ["どこにもない市1"])
-    assert [p["license_no"] for p in mapview.collect(conn, status="active", today=TODAY)[0]] == ["1"]
+    # 期限切れ（2）・取消（4）は出さない。業種の違う制度も一緒に出す
+    assert [(p["trade"], p["license_no"]) for p in points] == [("demolition", "1"), ("septic", "S1")]
+    assert (stats.plotted, stats.no_address, stats.not_found) == (2, 1, [])
+    assert [p["license_no"] for p in mapview.collect(conn, trade="septic", today=TODAY)[0]] == ["S1"]
     assert mapview.collect(conn, trade="water", today=TODAY)[0] == []
+    # 名簿をまだ入れていない制度も分かる
+    cov = {c["scheme_id"]: c for c in mapview.coverage(conn, today=TODAY)}
+    assert cov["pref-14.demolition"]["active"] == 2 and cov["kawasaki-suido.water"]["fetched_at"] is None
 
-    out = mapview.write_map(points, stats, tmp_path / "out" / "map.html")
+    out = mapview.write_map(points, stats, tmp_path / "out" / "map.html", coverage_rows=list(cov.values()))
     text = out.read_text("utf-8")
     assert "見本 太郎" not in text                     # 代表者名は出さない
     assert text.count("</script>") == 3               # 名前の </script> でスクリプトが切れない
     data = json.loads(re.search(r"const POINTS = (.*);\n", text).group(1).replace("<\\/", "</"))
+    meta = json.loads(re.search(r"const META = (.*);\n", text).group(1))
+    assert {"trade": "water", "license_name": "川崎市指定給水装置工事事業者", "active": 0, "fetched_at": None} \
+        in meta["coverage"]
     assert data[0]["name"] == "サンプル</script><b>解体" and data[0]["source_url"] == "https://example.invalid/m"
 
 

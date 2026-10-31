@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("--url", help="原本の取得元URL")
         sp.add_argument("--fetched-at", help="取得日（既定: 今日）")
         if name == "notice":
-            sp.add_argument("--date", required=True, help="告示日")
+            sp.add_argument("--date", help="告示日（省略時は告示PDFから読み取る）")
 
     sp = sub.add_parser("check", help="照合")
     sp.add_argument("--address", required=True, help="工事・依頼をする場所の住所")
@@ -89,19 +89,18 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("fetch", help="掲載ページから名簿ファイルを探してダウンロードする")
     g = sp.add_mutually_exclusive_group(required=True)
     g.add_argument("--scheme", help="制度ID")
-    g.add_argument("--all", action="store_true", help="掲載ページが分かっている全件名簿型の制度すべて")
+    g.add_argument("--all", action="store_true", help="掲載ページが分かっている全件名簿型・告示型の制度すべて")
     sp.add_argument("--list", action="store_true", help="ダウンロードせず、ページ内のファイルのリンクを一覧する")
-    sp.add_argument("--import", dest="do_import", action="store_true", help="ダウンロード後に取り込む（全件名簿のみ）")
+    sp.add_argument("--import", dest="do_import", action="store_true", help="ダウンロード後に取り込む（全件名簿・告示）")
     sp.add_argument("--dest", default="data/downloads", help="保存先")
 
     sp = sub.add_parser("geo-update", help="地図用に町丁目の座標（Geolonia 住所データ）を取り込む")
     sp.add_argument("--file", help="ダウンロード済みの latest.csv（省略時はダウンロードする。約50MB）")
 
-    sp = sub.add_parser("map", help="名簿の業者を地図にプロットしたHTMLを書き出す")
+    sp = sub.add_parser("map", help="今日の時点で有効な登録業者を、業種ごとに色分けして地図にプロットする")
     sp.add_argument("--out", default="data/map.html")
     sp.add_argument("--scheme", action="append", help="制度ID（複数指定可）")
     sp.add_argument("--trade", help="業種で絞る")
-    sp.add_argument("--status", choices=["active", "expired", "revoked", "unknown"], help="状態で絞る")
     sp.add_argument("--title", default="業者公認マップ")
 
     sub.add_parser("expire", help="有効期限切れの行を expired にする")
@@ -142,7 +141,7 @@ def _run(a, conn) -> int:
             # 0件で全件名簿を取り込むと、登録済みの行が全部「名簿から消えた」扱いになる
             raise SystemExit("名簿の行を1件も読み取れませんでした。取り込みは中止しました。\n"
                              "preview と --parser-config で見出しの行や列名を指定して試してください。")
-        published = parse_date(a.date) if a.cmd == "notice" else None
+        published = _notice_date(a.date, path) if a.cmd == "notice" else None
         doc_id, new = store_document(conn, a.scheme, path, kind="notice" if published else "full_list",
                                      url=a.url, published_on=published, fetched_at=fetched, raw_dir=a.raw_dir)
         if not new:
@@ -164,10 +163,14 @@ def _run(a, conn) -> int:
         from . import geo, mapview
         if not geo.has_towns(conn):
             raise SystemExit("町丁目の座標がまだありません。先に `uv run gyosya-map geo-update` を実行してください。")
-        points, stats = mapview.collect(conn, schemes=a.scheme, trade=a.trade, status=a.status)
-        out = mapview.write_map(points, stats, a.out, a.title)
-        print(f"{out} に {stats.plotted} 件をプロットしました（所在地なし {stats.no_address} 件、"
+        points, stats = mapview.collect(conn, schemes=a.scheme, trade=a.trade)
+        cov = mapview.coverage(conn, a.trade)
+        out = mapview.write_map(points, stats, a.out, a.title, cov)
+        print(f"{out} に有効な登録業者 {stats.plotted} 件をプロットしました（所在地なし {stats.no_address} 件、"
               f"位置が分からない住所 {len(stats.not_found)} 件）")
+        for c in cov:
+            state = f"{c['active']} 件" if c["fetched_at"] else "名簿未取り込み"
+            print(f"  {mapview.TRADE_STYLE[c['trade']][0]}\t{c['license_name']}\t{state}")
         for addr in stats.not_found[:10]:
             print(f"  位置が分からない: {addr}", file=sys.stderr)
     elif a.cmd == "check":
@@ -213,23 +216,55 @@ def _fetch(conn, a) -> int:
             print(f"{scheme_id}: ダウンロードしました {f.path}（{f.url}）")
             if not a.do_import:
                 continue
-            if fmt not in ("full_list_excel", "full_list_pdf"):
-                print(f"  告示などの差分は日付が必要なので、notice --scheme {scheme_id} --file {f.path} --date 告示日"
-                      " で取り込んでください")
+            notice = fmt == "notice_diff"
+            if not notice and fmt not in ("full_list_excel", "full_list_pdf"):
+                print(f"  公開形式（{fmt or '未調査'}）が全件名簿・告示ではないので、取り込みは省略しました")
                 continue
-            records = parse_file(f.path, load_for_scheme(conn, scheme_id))
+            records = parse_file(f.path, load_for_scheme(conn, scheme_id), notice=notice)
             if not records:
                 print(f"  名簿の行を1件も読み取れませんでした。取り込みは中止しました"
-                      f"（preview --scheme {scheme_id} --file {f.path} で確かめてください）", file=sys.stderr)
+                      f"（preview --scheme {scheme_id} --file {f.path}{' --notice' if notice else ''} で確かめてください）",
+                      file=sys.stderr)
                 failed += 1
                 continue
-            doc_id, new = store_document(conn, scheme_id, f.path, kind="full_list", url=f.url, raw_dir=a.raw_dir)
+            published = None
+            if notice:
+                from .ingest.pdf import detect_notice_date
+                published = detect_notice_date(f.path) if f.path.suffix.lower() == ".pdf" else None
+                if published is None:
+                    print(f"  告示日を読み取れませんでした。notice --scheme {scheme_id} --file {f.path} --date 告示日"
+                          " で取り込んでください", file=sys.stderr)
+                    failed += 1
+                    continue
+            doc_id, new = store_document(conn, scheme_id, f.path, kind="notice" if notice else "full_list",
+                                         url=f.url, published_on=published, raw_dir=a.raw_dir)
             if not new:
                 print("  前回と同じファイルなので取り込みは省略しました")
+                continue
+            if notice:
+                stats = apply_notice_events(conn, scheme_id, records, doc_id=doc_id, notice_date=published)
+                print(f"  告示日 {published.isoformat()}: " + json.dumps({"records": len(records), **stats},
+                                                                        ensure_ascii=False))
                 continue
             stats = import_full_list(conn, scheme_id, records, doc_id=doc_id)
             print("  " + json.dumps({"records": len(records), **stats}, ensure_ascii=False))
     return 1 if failed else 0
+
+
+def _notice_date(given: str | None, path: Path) -> dt.date:
+    if given:
+        d = parse_date(given)
+        if d is None:
+            raise SystemExit(f"告示日が読めません: {given}")
+        return d
+    d = None
+    if path.suffix.lower() == ".pdf":
+        from .ingest.pdf import detect_notice_date
+        d = detect_notice_date(path)
+    if d is None:
+        raise SystemExit(f"{path} から告示日を読み取れませんでした。--date 2026-09-30 のように指定してください。")
+    print(f"告示日: {d.isoformat()}（PDFから読み取り）", file=sys.stderr)
+    return d
 
 
 def _download_large(url: str, dest: Path) -> Path:

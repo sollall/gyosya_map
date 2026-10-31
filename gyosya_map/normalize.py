@@ -84,8 +84,8 @@ def normalize_address(address: str) -> str:
 
 _ERAS = {"明治": 1867, "大正": 1911, "昭和": 1925, "平成": 1988, "令和": 2018,
          "M": 1867, "T": 1911, "S": 1925, "H": 1988, "R": 2018}
-_ERA_RE = re.compile(r"(明治|大正|昭和|平成|令和|[MTSHR])\s*(元|[0-9]+)\s*[年.\-/]\s*([0-9]+)\s*[月.\-/]\s*([0-9]+)\s*日?")
-_AD_RE = re.compile(r"([0-9]{4})\s*[年.\-/]\s*([0-9]{1,2})\s*[月.\-/]\s*([0-9]{1,2})\s*日?")
+ERA_RE = re.compile(r"(明治|大正|昭和|平成|令和|[MTSHR])\s*(元|[0-9]+)\s*[年.\-/]\s*([0-9]+)\s*[月.\-/]\s*([0-9]+)\s*日?")
+AD_RE = re.compile(r"([0-9]{4})\s*[年.\-/]\s*([0-9]{1,2})\s*[月.\-/]\s*([0-9]{1,2})\s*日?")
 
 
 def parse_date(value) -> dt.date | None:
@@ -97,12 +97,12 @@ def parse_date(value) -> dt.date | None:
     if isinstance(value, dt.date):
         return value
     s = nfkc(str(value)).strip().upper()
-    m = _ERA_RE.search(s)
+    m = ERA_RE.search(s)
     if m:
         era, y, mo, d = m.groups()
         year = _ERAS[era] + (1 if y == "元" else int(y))
         return _safe_date(year, int(mo), int(d))
-    m = _AD_RE.search(s)
+    m = AD_RE.search(s)
     if m:
         return _safe_date(*(int(x) for x in m.groups()))
     return None

@@ -35,6 +35,8 @@ def make_pdf(path: Path, sections: list[tuple[str | None, list[list[str]]]]) -> 
             continue
         if heading:
             story += [Paragraph(heading, style), Spacer(1, 8)]
+        if not table:
+            continue
         t = Table(table)
         t.setStyle(TableStyle([("FONTNAME", (0, 0), (-1, -1), "HeiseiKakuGo-W5"),
                                ("GRID", (0, 0), (-1, -1), 0.5, colors.black)]))

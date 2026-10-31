@@ -94,3 +94,35 @@ def parse_notice_pdf(path: str | Path, config: ParserConfig | None = None) -> li
                 rec["needs_review"] = True
                 events.append(rec)
     return events
+
+
+_ISSUER = re.compile(r"(市長|町長|村長|区長|知事|管理者|局長|大臣)")
+
+
+def detect_notice_date(path: str | Path):
+    """告示PDFの告示日を推定する。分からなければ None。
+
+    告示は本文のあとに「令和8年9月30日 川崎市上下水道事業管理者 …」と日付と告示者が並ぶ。
+    表の中の指定年月日を拾わないよう、告示者（市長・管理者など）と同じ行か、その直前の
+    日付だけの行にある日付だけを採る。
+    """
+    import pdfplumber
+
+    from ..normalize import AD_RE, ERA_RE, nfkc, parse_date
+
+    with pdfplumber.open(path) as pdf:
+        for page in pdf.pages[:3]:
+            lines = [re.sub(r"\s+", "", nfkc(l)) for l in (page.extract_text() or "").splitlines()]
+            for i, line in enumerate(lines):
+                issuer = _ISSUER.search(line)
+                if not issuer:
+                    continue
+                # 告示者と同じ行で、告示者の前にある日付
+                head = line[:issuer.start()]
+                dates = [m for rx in (ERA_RE, AD_RE) for m in rx.finditer(head)]
+                if dates:
+                    return parse_date(max(dates, key=lambda m: m.end()).group(0))
+                # 告示者の前の行が日付だけ（表の行の日付は採らない）
+                if i and (m := ERA_RE.fullmatch(lines[i - 1]) or AD_RE.fullmatch(lines[i - 1])):
+                    return parse_date(m.group(0))
+    return None

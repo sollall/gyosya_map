@@ -46,7 +46,8 @@ uv run gyosya-map fetch --all --import
 "download": {"text_pattern": "登録業者名簿", "href_pattern": "\\.xlsx?$", "pick": "first"}
 ```
 
-告示（差分）型はダウンロードまで。取り込みには告示日が要るので `notice --date` で行う。
+告示（差分）型も `--import` で取り込める。告示日は告示PDFの「日付＋告示者（市長・管理者など）」の行から読み取り、
+読み取れないときは `notice --date` での取り込みを案内する。
 
 ### 手元のファイルを取り込む
 
@@ -65,7 +66,7 @@ uv run gyosya-map import --scheme pref-14.demolition --file ~/Downloads/<ダウ�
 # --file にはファイルそのもののURL（.xlsx / .pdf へのリンク）も指定できる。掲載ページ（HTML）のURLは不可
 uv run gyosya-map import --scheme pref-14.demolition --file https://www.pref.kanagawa.jp/<名簿ファイルのパス>.xlsx
 
-# 告示（差分）を古い順に積み上げる
+# 告示（差分）を古い順に積み上げる（--date を省くと告示PDFから告示日を読み取る）
 uv run gyosya-map notice --scheme kawasaki-suido.water --file https://www.city.kawasaki.jp/koho/cmsfiles/0000007/7422/7422.pdf \
   --date 2026-09-30
 ```
@@ -90,22 +91,28 @@ uv run gyosya-map schemes   # 制度の一覧と名簿の取得日
 
 ## 地図
 
-名簿の業者を所在地にプロットしたHTMLを書き出す（ブラウザで開く。地図は国土地理院の淡色地図）。
+今日の時点で有効な登録業者を、業種ごとに色分けして地図にプロットしたHTMLを書き出す
+（ブラウザで開く。地図は国土地理院の淡色地図）。期限切れ・取消・名簿から消えた業者は出さない。
 
 ```bash
 # 初回だけ: 町丁目の座標（Geolonia 住所データ, 約50MB）をダウンロードして取り込む
 uv run gyosya-map geo-update
 
-# 地図を書き出す
+# 名簿をまとめて取得・取り込み（全件名簿と告示。告示日は告示PDFから読み取る）
+uv run gyosya-map fetch --all --import
+
+# 地図を書き出す。業種ごとの件数と、名簿がまだ無い制度も表示する
 uv run gyosya-map map --out data/map.html
-uv run gyosya-map map --trade demolition --status active --out data/kaitai.html
+uv run gyosya-map map --trade demolition --out data/kaitai.html
 ```
 
-- 色は状態（有効・期限切れ・取消／廃止・名簿から消えた）。制度ごとに表示を切り替えられ、近い点はまとめて表示する。
+- 業種ごとに表示を切り替えられ、近い点はまとめて表示する。
+- 左下に、名簿をまだ取り込んでいない制度（公開形式が未調査・検索システム型など）を出す。
 - ピンを押すと、業者名・番号・有効期限・所在地・出典の名簿と取得日が出る。代表者名は出さない。
 - 位置は町丁目の代表点で、番地までは合わせていない。丁目が分からない住所は町名の中心、
   町名も分からない住所は市区町村の中心に置き、ポップアップにその旨を出す。
 - 市区町村が分からない住所は表示せず、件数を出す。
+- 告示（差分）型の名簿は過去分が欠けるため、実際の登録業者より少なく出ることがある。
 
 ## 判定
 

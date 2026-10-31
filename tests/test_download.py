@@ -116,3 +116,41 @@ def test_cli_fetch_import(tmp_path, monkeypatch, capsys):
     assert "前回と同じファイル" in capsys.readouterr().out
     assert main(["--db", dbp, "fetch", "--scheme", "pref-14.demolition", "--list"]) == 0
     assert "meibo_r0810.pdf" in capsys.readouterr().out
+
+
+def _notice_pdf(path, date_line="令和8年9月30日", separate=False):
+    from fixtures import make_pdf
+    header = ["指定番号", "氏名又は名称", "住所", "指定年月日"]
+    footer = [(date_line, []), ("川崎市上下水道事業管理者　見本　太郎", [])] if separate else \
+        [(f"{date_line}　川崎市上下水道事業管理者　見本　太郎", [])]
+    return make_pdf(path, [
+        ("川崎市上下水道局告示第99号　指定給水装置工事事業者を次のとおり指定した。", []),
+        ("新たに指定した事業者", [header, ["501", "サンプル管工", "川崎市中原区井田1", "令和8年9月1日"]]),
+        *footer,
+    ])
+
+
+def test_detect_notice_date(tmp_path):
+    from gyosya_map.ingest.pdf import detect_notice_date
+    # 表の指定年月日（9月1日）ではなく、告示者の前の日付を採る
+    assert detect_notice_date(_notice_pdf(tmp_path / "a.pdf")) == dt.date(2026, 9, 30)
+    assert detect_notice_date(_notice_pdf(tmp_path / "c.pdf", separate=True)) == dt.date(2026, 9, 30)
+    assert detect_notice_date(_notice_pdf(tmp_path / "b.pdf", date_line="")) is None
+
+
+def test_cli_fetch_imports_notice(tmp_path, monkeypatch, capsys):
+    from gyosya_map.cli import main
+    from gyosya_map.ingest import download
+
+    dbp, raw = str(tmp_path / "g.db"), str(tmp_path / "raw")
+    main(["--db", dbp, "init"])
+    pdf = _notice_pdf(tmp_path / "n.pdf")
+    url = "https://www.city.kawasaki.jp/koho/cmsfiles/0000007/7422/7422.pdf"
+    monkeypatch.setattr(download._fetch, "fetch", lambda u: {url: pdf.read_bytes()}[u])
+    assert main(["--db", dbp, "--raw-dir", raw, "fetch", "--scheme", "kawasaki-suido.water", "--import",
+                 "--dest", str(tmp_path / "dl")]) == 0
+    assert "告示日 2026-09-30" in capsys.readouterr().out
+    row = db.connect(dbp).execute("SELECT valid_from, status FROM licensee WHERE license_no = '501'").fetchone()
+    assert tuple(row) == ("2026-09-01", "active")
+    # notice コマンドも --date を省略できる
+    assert main(["--db", dbp, "--raw-dir", raw, "notice", "--scheme", "kawasaki-suido.sewer", "--file", str(pdf)]) == 0
