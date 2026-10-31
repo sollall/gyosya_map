@@ -22,6 +22,10 @@ NOT_FOUND = "確認できず"
 UNDETERMINED = "判定不能"
 NO_SCHEME = "制度なし"
 
+# 全件名簿が公開されている公開形式（取り込めば完全性が high になる）。
+# full_list_html は掲載ページのHTML表だけでファイルの配布が無いもの。
+FULL_LIST_FORMATS = ("full_list_excel", "full_list_pdf", "full_list_html")
+
 
 class SearchSystemClient(Protocol):
     """検索システム型の制度（国交省 建設業者検索など）を照会時に問い合わせる。
@@ -104,7 +108,7 @@ def _license_label(license_no: str) -> str:
 
 def _completeness(conn: sqlite3.Connection, scheme: sqlite3.Row, live: dict[str, list[dict] | None]) -> str:
     fmt = scheme["publication_format"]
-    if fmt in ("full_list_excel", "full_list_pdf"):
+    if fmt in FULL_LIST_FORMATS:
         return "high" if roster_fetched_at(conn, scheme["scheme_id"]) else "none"
     if fmt == "search_system":
         # 問い合わせが失敗した（None）ときは確かめられていないので完全性は none
@@ -300,7 +304,7 @@ def check(conn: sqlite3.Connection, *, address: str, trade: str, name: str | Non
                 reasons.append(f"{s.license_name}は検索システムに問い合わせできなかった"
                                if s.license_name in failed_names
                                else f"{s.license_name}は検索システムでの確認が必要")
-            elif s.publication_format in ("full_list_excel", "full_list_pdf"):
+            elif s.publication_format in FULL_LIST_FORMATS:
                 reasons.append(f"{s.license_name}の名簿が未取得")
             elif s.publication_format == "phone_only":
                 reasons.append(f"{s.license_name}の名簿が公開されていない")

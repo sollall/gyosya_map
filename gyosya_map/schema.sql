@@ -14,8 +14,11 @@ CREATE TABLE IF NOT EXISTS scheme (
     license_name       TEXT NOT NULL,       -- 自治体ごとの正式名称
     validity_years     INTEGER,
     publication_format TEXT CHECK (publication_format IN
-                         ('full_list_pdf', 'full_list_excel', 'search_system', 'notice_diff', 'phone_only')),
-                                            -- NULL = 未調査
+                         ('full_list_pdf', 'full_list_excel', 'full_list_html',
+                          'search_system', 'notice_diff', 'phone_only')),
+                                            -- NULL = 未調査。full_list_html は全件名簿が
+                                            -- 掲載ページのHTML表だけで、ファイルの配布が無いもの
+                                            -- （例: 東京都指定排水設備工事事業者）
     source_url         TEXT,
     contact            TEXT,
     terms_of_use       TEXT,                -- 公開資料の再利用条件
