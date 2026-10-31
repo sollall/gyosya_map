@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gyosya_map"
+version = "0.1.0"
+description = "自治体別 業者公認確認データベース"
+requires-python = ">=3.10"
+dependencies = [
+    "openpyxl>=3.1",
+    "pdfplumber>=0.11",
+    "xlrd>=2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "reportlab>=4",
+    "xlwt>=1.3.0",
+]
+
+[project.scripts]
+gyosya-map = "gyosya_map.cli:main"
+
+[tool.setuptools]
+packages = ["gyosya_map", "gyosya_map.ingest", "gyosya_map.seed"]
+
+[tool.setuptools.package-data]
+gyosya_map = ["schema.sql"]
+"gyosya_map.seed" = ["*.json", "*.csv", "prefectures/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tests"]
