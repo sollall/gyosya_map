@@ -6,7 +6,7 @@
 仕様書: [自治体別 業者公認確認データベース 仕様書](https://claude.ai/artifact/NGD2J6jMVFHDWdLbFergfN)
 
 現在は **フェーズ0（川崎市＋神奈川県の試作）**。制度と名簿は川崎市・神奈川県の分だけだが、
-市区町村マスター（全国1,914件）と管轄の既定ルールは全国分を持っているので、
+市区町村マスター（全国1,912件）と管轄の既定ルールは全国分を持っているので、
 他の自治体は制度を書き足すだけで照合できる（下の「自治体を追加する」）。
 
 ## 使い方
@@ -185,20 +185,22 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 担当機関のIDは `pref-<都道府県コード>`、`muni-<団体コード6桁>` で、市区町村マスターから自動で作る。
 上下水道局・企業団などは seed の `authorities` に書く。
 
-`gyosya_map/seed/prefectures/<コード>-<名前>.json` を足す:
+`gyosya_map/seed/prefectures/<コード>-<名前>.json` を足す。
+下の例の都道府県コード`99`と「見本県」は**架空**で、書き方を見せるためだけのもの。
+実際の中身は `gyosya_map/seed/prefectures/` の各ファイルを見る。
 
 ```json
 {
-  "prefecture": "13",
-  "authorities": [{"authority_id": "tokyo-suido", "name": "東京都水道局", "level": "water_utility", "parent_id": "pref-13"}],
+  "prefecture": "99",
+  "authorities": [{"authority_id": "mihon-suido", "name": "見本県営水道", "level": "water_utility", "parent_id": "pref-99"}],
   "schemes": [{
-    "scheme_id": "pref-13.demolition", "authority_id": "pref-13", "trade": "demolition",
-    "license_name": "東京都解体工事業登録", "validity_years": 5, "publication_format": "full_list_excel",
-    "source_url": "https://...", "contact": "東京都 ○○課", "verified_at": "2026-10-30",
+    "scheme_id": "pref-99.demolition", "authority_id": "pref-99", "trade": "demolition",
+    "license_name": "見本県解体工事業登録", "validity_years": 5, "publication_format": "full_list_excel",
+    "source_url": "https://...", "contact": "見本県 ○○課", "verified_at": "2026-10-30",
     "parser": {"sheets": ["登録業者一覧"], "header_row": 3, "aliases": {"name": ["屋号"]}}
   }],
-  "municipalities": {"府中市": {"jurisdiction": {"water": ["tokyo-suido"]}}, "檜原村": {"public_sewer": false}},
-  "overrides": [{"municipality": "八王子市", "town_prefix": "○○町", "trade": "sewer", "authority_id": null, "note": "公共下水道の区域外"}]
+  "municipalities": {"見本市": {"jurisdiction": {"water": ["mihon-suido"]}}, "山里村": {"public_sewer": false}},
+  "overrides": [{"municipality": "見本市", "town_prefix": "○○町", "trade": "sewer", "authority_id": null, "note": "公共下水道の区域外"}]
 }
 ```
 
@@ -218,8 +220,15 @@ seed に書くのは、制度（名簿）と、既定と違う管轄だけ。
 
 ### 市区町村マスターの更新
 
-`gyosya_map/seed/municipalities.csv` は [Geolonia 住所データ](https://github.com/geolonia/japanese-addresses)
-（CC BY 4.0）から `scripts/build_municipalities.py` で作っている。合併・政令市移行のときは作り直す。
+`gyosya_map/seed/municipalities.csv`（1,912行）は `scripts/build_municipalities.py` で作っている。
+どの市区町村が存在するか・正式な表記・政令市と行政区の対応は総務省
+[「都道府県コード及び市区町村コード」](https://www.soumu.go.jp/denshijiti/code.html)に従い、
+コード表に無い郡の名前だけ [Geolonia 住所データ](https://github.com/geolonia/japanese-addresses)（CC BY 4.0）
+から補う。合併・政令市移行のときは作り直す。
+
+内訳は 市792（うち政令市20）・町743・村183・特別区23 の1,741に、政令市の行政区171を足した数。
+北方領土の6村はコード表には載っているが、自治体として機能しておらず照合する住所も無いので入れていない
+（総務省が公表する市町村数1,718にも含まれない）。
 保健所設置市（中核市62市と地域保健法施行令で定める6市）は `seed/health_center_cities.csv`。政令市と特別区は自動で付く。
 
 ## 構成
