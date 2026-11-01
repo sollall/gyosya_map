@@ -103,6 +103,12 @@
    "trade": "septic",
    "license_name": "埼玉県浄化槽保守点検業者登録",
    "validity_years": 5,
+   "excluded_municipalities": [
+    "さいたま市",
+    "川越市",
+    "川口市",
+    "越谷市"
+   ],
    "publication_format": "full_list_excel",
    "source_url": "https://www.pref.saitama.lg.jp/a0505/jyoukasou-ijikanri/hoshutenken.html",
    "contact": "埼玉県環境部水環境課浄化槽・豊かな川づくり担当（〒330-9301 さいたま市浦和区高砂三丁目15番1号 県庁第三庁舎1階、電話 048-830-3083）",

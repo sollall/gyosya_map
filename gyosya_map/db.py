@@ -137,6 +137,21 @@ def load_municipalities(conn: sqlite3.Connection, csv_text: str | None = None,
     return len(rows)
 
 
+def _excluded_municipalities(conn: sqlite3.Connection, scheme: dict, pref_code: str | None) -> str | None:
+    """制度の対象外の市区町村（名前またはコード）をコードのJSON配列にする。
+
+    並びは揃えるので、seed の書き順が変わっても同じDBになる。
+    """
+    codes = set()
+    for key in scheme.get("excluded_municipalities") or []:
+        code = _municipality_code(conn, key, pref_code)
+        if conn.execute("SELECT 1 FROM municipality WHERE code = ?", (code,)).fetchone() is None:
+            raise ValueError(f"{scheme['scheme_id']} の excluded_municipalities に"
+                             f"収録されていない市区町村があります: {key}")
+        codes.add(code)
+    return json.dumps(sorted(codes)) if codes else None
+
+
 def _municipality_code(conn: sqlite3.Connection, key: str, pref_code: str | None) -> str:
     """seed の市区町村キー（6桁/5桁コード、または都道府県内の名前）をコードにする。"""
     if key.isdigit():
@@ -161,6 +176,8 @@ def load_seed_data(conn: sqlite3.Connection, data: dict) -> None:
             values = {k: s.get(k) for k in _SCHEME_FIELDS}
             values["parser_config"] = json.dumps(s["parser"], ensure_ascii=False) if s.get("parser") else None
             values["download_config"] = json.dumps(s["download"], ensure_ascii=False) if s.get("download") else None
+            values["excluded_municipalities"] = _excluded_municipalities(conn, s, pref)
+            values["roster_exhaustive"] = int(s.get("roster_exhaustive", True))
             conn.execute(
                 f"""INSERT INTO scheme ({', '.join(values)}) VALUES ({', '.join(':' + k for k in values)})
                     ON CONFLICT(scheme_id) DO UPDATE SET
